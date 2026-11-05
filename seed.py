@@ -27,6 +27,10 @@ def _now() -> str:
 # - blocker becomes a single is_blocker=1 todo at order 0
 # - todos become non-blocker active todos in listed order
 # - for_later items become for_later=1 todos in listed order
+# Default rows a brand-new board leaves out. Existing boards keep every row
+# they already have; this only shapes a first-time user's starting set.
+NEW_BOARD_OMITTED_ROWS: tuple[str, ...] = ("side_project",)
+
 PROJECTS: list[dict] = [
     {
         "name": "Correspondence",
@@ -70,6 +74,13 @@ def seed() -> None:
     project_order_by_cat: dict[str, int] = {}
 
     with db.transaction() as cx:
+        for key in NEW_BOARD_OMITTED_ROWS:
+            cx.execute("DELETE FROM board_rows WHERE key = ?", (key,))
+        for position, row in enumerate(cx.execute(
+            "SELECT key FROM board_rows ORDER BY position, key"
+        ).fetchall()):
+            cx.execute("UPDATE board_rows SET position = ? WHERE key = ?", (position, row["key"]))
+
         for proj in PROJECTS:
             cat = proj["category"]
             display_order = project_order_by_cat.get(cat, 0)

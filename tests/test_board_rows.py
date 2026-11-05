@@ -263,11 +263,19 @@ class SeedTests(TempDB):
             0,
         )
         self.assertTrue(db.get_settings()["onboarding_pending"])
+        # New boards start without Side Projects; positions stay contiguous.
+        rows = db.list_rows()
+        self.assertEqual(
+            [r["key"] for r in rows],
+            ["top_of_mind", "near_publication", "in_development", "early_stage", "future_ideas"],
+        )
+        self.assertEqual([r["position"] for r in rows], list(range(5)))
 
     def test_seed_is_a_no_op_on_an_existing_board(self):
         _project(self.conn, "Mine", "in_development")
         seed.seed()
         self.assertFalse(db.get_settings()["onboarding_pending"])
+        self.assertIn("side_project", db.row_keys())   # existing boards keep it
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0], 1)
 
 
