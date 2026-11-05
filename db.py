@@ -43,6 +43,12 @@ DEFAULT_ROWS: tuple[tuple[str, str], ...] = (
 CATEGORIES = tuple(key for key, _ in DEFAULT_ROWS)
 ROW_LABEL_MAX = 60
 
+# Stored in SQLite's PRAGMA user_version after init_schema(). Bump it whenever
+# a migration is added, so the next launch takes a pre-migration backup first.
+#   1: editable board rows (board_rows, projects.category CHECK removed)
+SCHEMA_VERSION = 1
+PRE_MIGRATION_RETENTION = 5
+
 SCHEMA_SQL = f"""
 PRAGMA foreign_keys = ON;
 
@@ -134,6 +140,7 @@ def _migrate_rename_followup_to_for_later(conn: sqlite3.Connection) -> None:
 def create_backup(
     backup_dir: Path | None = None,
     retention: int | None = None,
+    prefix: str = "agenda",
 ) -> Path:
     """Create and verify a self-contained online backup of the Agenda DB.
 
@@ -153,7 +160,7 @@ def create_backup(
     keep = max(1, keep)
     target_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    final_path = target_dir / f"agenda-{timestamp}.db"
+    final_path = target_dir / f"{prefix}-{timestamp}.db"
 
     fd, temporary_name = tempfile.mkstemp(
         prefix=".agenda-backup-",
@@ -181,7 +188,7 @@ def create_backup(
         temporary_path.unlink(missing_ok=True)
 
     backups = sorted(
-        target_dir.glob("agenda-*.db"),
+        target_dir.glob(f"{prefix}-*.db"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
@@ -848,8 +855,53 @@ def patch_settings(data: dict) -> dict:
     return get_settings()
 
 
+class PreMigrationBackupError(RuntimeError):
+    """The database needs migrating but couldn't be backed up first."""
+
+
+def _stored_schema_version(path: Path) -> int | None:
+    """user_version of an existing Agenda database, or None if there is none."""
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
+    try:
+        has_projects = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'"
+        ).fetchone()
+        if not has_projects:
+            return None
+        return int(conn.execute("PRAGMA user_version").fetchone()[0])
+    finally:
+        conn.close()
+
+
+def backup_before_migration() -> Path | None:
+    """Snapshot an existing database before migrations change it.
+
+    Runs only when the database predates this code's SCHEMA_VERSION. Its
+    snapshots (pre-migration-v<old>-to-v<new>-<time>.db) are pruned
+    separately from the rolling backups, so routine backups never push them
+    out. If the snapshot fails, nothing is migrated: the caller should stop
+    rather than change an unprotected database.
+    """
+    stored = _stored_schema_version(DB_PATH)
+    if stored is None or stored >= SCHEMA_VERSION:
+        return None
+    try:
+        return create_backup(
+            retention=PRE_MIGRATION_RETENTION,
+            prefix=f"pre-migration-v{stored}-to-v{SCHEMA_VERSION}",
+        )
+    except Exception as exc:
+        raise PreMigrationBackupError(
+            "Agenda needs to update its database but could not back it up first, "
+            f"so nothing was changed. ({exc})"
+        ) from exc
+
+
 def init_schema() -> None:
-    """Apply schema (idempotent)."""
+    """Apply schema (idempotent), backing up first if migrations will run."""
+    backup_before_migration()
     conn = get_conn()
     conn.executescript(SCHEMA_SQL)
     _migrate_rename_followup_to_for_later(conn)
@@ -884,6 +936,7 @@ def init_schema() -> None:
     _migrate_add_board_rows(conn)
     _migrate_drop_project_category_check(conn)
     _migrate_add_onboarding_flag(conn)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def _migrate_add_quota_tables(conn: sqlite3.Connection) -> None:
