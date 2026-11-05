@@ -16,7 +16,9 @@
 #   - ad-hoc signed with no entitlements, so iCloud sync is impossible, and
 #     sandbox mode also refuses CloudKit, Sparkle updates, launch-at-login,
 #     and keychain cleanup in code;
-#   - installed to mac/Agenda/dist/sandbox/, never ~/Applications.
+#   - installed to mac/Agenda/dist/sandbox/, never ~/Applications;
+#   - its executable is named "Agenda Sandbox", so stopping the real app
+#     (`pkill -x Agenda` in install.sh and the deploy steps) can't quit it.
 #
 # Usage:
 #   scripts/try-first-run.sh            # build, wipe sandbox data, launch
@@ -55,7 +57,7 @@ fi
 quit_sandbox() {
     # Quit only the sandbox app (matched by bundle path), then its server
     # (matched by the sandbox port), never the real Agenda on 8552.
-    pkill -f "$APP_DEST/Contents/MacOS/Agenda" 2>/dev/null || true
+    pkill -f "$APP_DEST/Contents/MacOS/" 2>/dev/null || true
     local pids
     pids="$(lsof -nP -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true)"
     if [[ -n "$pids" ]]; then
@@ -84,7 +86,9 @@ mkdir -p "$(dirname "$APP_DEST")"
 "$PKG_DIR/scripts/assemble-app.sh" "$APP_DEST"
 
 PLIST="$APP_DEST/Contents/Info.plist"
+mv "$APP_DEST/Contents/MacOS/Agenda" "$APP_DEST/Contents/MacOS/$APP_NAME"
 /usr/libexec/PlistBuddy \
+    -c "Set :CFBundleExecutable $APP_NAME" \
     -c "Set :CFBundleIdentifier $BUNDLE_ID" \
     -c "Set :CFBundleName $APP_NAME" \
     -c "Set :CFBundleDisplayName $APP_NAME" \
