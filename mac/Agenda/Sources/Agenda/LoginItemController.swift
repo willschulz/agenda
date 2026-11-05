@@ -9,6 +9,12 @@ final class LoginItemController: ObservableObject {
     @Published private(set) var statusMessage: String?
 
     init() {
+        if AgendaRuntime.isSandbox {
+            // A throwaway copy must never register itself to launch at login.
+            enabled = false
+            statusMessage = "Not available in the sandbox copy."
+            return
+        }
         let defaults = UserDefaults.standard
         if defaults.object(forKey: Self.preferenceKey) == nil {
             let configured = Bundle.main.object(
@@ -21,6 +27,7 @@ final class LoginItemController: ObservableObject {
     }
 
     func setEnabled(_ newValue: Bool) {
+        guard !AgendaRuntime.isSandbox else { return }
         enabled = newValue
         UserDefaults.standard.set(newValue, forKey: Self.preferenceKey)
         apply(newValue)

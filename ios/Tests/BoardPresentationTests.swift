@@ -1,3 +1,4 @@
+import AgendaSyncCore
 import XCTest
 @testable import Agenda
 
@@ -14,13 +15,48 @@ final class BoardPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            presentation.sections.map(\.category),
-            [.topOfMind, .inDevelopment, .futureIdeas]
+            presentation.sections.map(\.key),
+            ["top_of_mind", "in_development", "future_ideas"]
+        )
+        XCTAssertEqual(
+            presentation.sections.map(\.title),
+            ["Top of Mind", "In Development", "Future Ideas"]
         )
         XCTAssertEqual(
             presentation.sections[1].projects.map(\.id),
             ["development-a", "development-b"]
         )
+    }
+
+    func testSyncedRowDefinitionsSetOrderAndNames() {
+        let presentation = AgendaBoardPresentation(
+            projects: [
+                project("dev", category: "in_development", order: 0),
+                project("ongoing", category: "ongoing", order: 0),
+                project("top", category: "top_of_mind", order: 0),
+            ],
+            todos: [],
+            rowDefinitions: [
+                AgendaRowDefinition(key: "top_of_mind", label: "Now"),
+                AgendaRowDefinition(key: "ongoing", label: "Ongoing"),
+                AgendaRowDefinition(key: "in_development", label: "Building"),
+            ]
+        )
+        XCTAssertEqual(presentation.sections.map(\.key), ["top_of_mind", "ongoing", "in_development"])
+        XCTAssertEqual(presentation.sections.map(\.title), ["Now", "Ongoing", "Building"])
+    }
+
+    func testProjectsInUnknownRowsAreShownNotHidden() {
+        // An older snapshot (no definitions) and a project in a newer row.
+        let presentation = AgendaBoardPresentation(
+            projects: [
+                project("top", category: "top_of_mind", order: 0),
+                project("new-row", category: "lab_admin", order: 0),
+            ],
+            todos: []
+        )
+        XCTAssertEqual(presentation.sections.map(\.key), ["top_of_mind", "lab_admin"])
+        XCTAssertEqual(presentation.sections.last?.title, "Lab Admin")
     }
 
     func testSnapshotRanksPrecedeFallbackAndPartialRowsStayDeterministic() {
@@ -95,13 +131,20 @@ final class BoardPresentationTests: XCTestCase {
         XCTAssertFalse(card.openTodos.contains { $0.id == "done" })
     }
 
-    func testOmitsEmptyUnknownCategories() {
+    func testOmitsRowsWithoutProjects() {
+        // Rows with no projects (default or user-defined) aren't shown.
+        // Projects in unknown rows are no longer hidden; see
+        // testProjectsInUnknownRowsAreShownNotHidden.
         let presentation = AgendaBoardPresentation(
-            projects: [project("unknown", category: "not_a_category")],
-            todos: []
+            projects: [project("top", category: "top_of_mind")],
+            todos: [],
+            rowDefinitions: [
+                AgendaRowDefinition(key: "top_of_mind", label: "Top of Mind"),
+                AgendaRowDefinition(key: "ongoing", label: "Ongoing"),
+            ]
         )
 
-        XCTAssertTrue(presentation.sections.isEmpty)
+        XCTAssertEqual(presentation.sections.map(\.key), ["top_of_mind"])
     }
 
     private func project(

@@ -50,7 +50,8 @@ struct ContentView: View {
         let presentation = AgendaBoardPresentation(
             projects: sync.store.projects,
             todos: sync.store.todos,
-            boardOrderRows: sync.store.boardOrderRows
+            boardOrderRows: sync.store.boardOrderRows,
+            rowDefinitions: sync.store.rowDefinitions
         )
 
         NavigationStack {
@@ -146,7 +147,7 @@ struct AgendaCategoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(section.category.title)
+                Text(section.title)
                     .font(.system(.headline, design: .serif, weight: .semibold))
                     .foregroundStyle(AgendaPalette.text)
                 Text("\(section.projects.count)")
@@ -269,7 +270,7 @@ struct AgendaOverviewView: View {
                 ForEach(presentation.sections) { section in
                     VStack(alignment: .leading, spacing: 9) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text(section.category.title)
+                            Text(section.title)
                                 .font(.system(.headline, design: .serif, weight: .semibold))
                             Spacer()
                             Text(
