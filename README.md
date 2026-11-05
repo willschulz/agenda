@@ -36,9 +36,14 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
 
 ## Features
 
-- **Six-row board** (`top_of_mind | near_publication | in_development |
-  early_stage | side_project | future_ideas`) of portrait-aspect project
-  cards. Row names are human-readable in the UI.
+- **Rows as priority tiers**: portrait-aspect project cards arranged in rows,
+  highest priority at the top. A board starts with Top of Mind, Near
+  Publication, In Development, Early Stage, Side Projects, and Future Ideas.
+  **Settings → Edit Rows** renames, adds, reorders, and deletes rows on a
+  zoomed-out view of the board, and asks where a deleted row's projects go.
+- **First-run welcome tour**: a new board opens a short tour that explains the
+  tiers and lets the user shape their rows. Top of Mind starts with
+  Correspondence, Life Stuff, and Work Miscellany. Replay it from Settings.
 - **Project cards**: name, optional deadline badge, and an ordered todo list
   with the blocker pinned and highlighted at the top, plus a "Later…"
   disclosure for parked `for_later` items.
