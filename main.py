@@ -524,8 +524,9 @@ class ProjectCreate(BaseModel):
     @field_validator("category")
     @classmethod
     def _check_category(cls, v: str) -> str:
-        if v not in db.CATEGORIES:
-            raise ValueError(f"category must be one of {db.CATEGORIES}")
+        keys = db.row_keys()
+        if v not in keys:
+            raise ValueError(f"category must be one of the board's rows: {keys}")
         return v
 
 
@@ -543,9 +544,27 @@ class ProjectUpdate(BaseModel):
     @field_validator("category")
     @classmethod
     def _check_category(cls, v):
-        if v is not None and v not in db.CATEGORIES:
-            raise ValueError(f"category must be one of {db.CATEGORIES}")
+        if v is not None:
+            keys = db.row_keys()
+            if v not in keys:
+                raise ValueError(f"category must be one of the board's rows: {keys}")
         return v
+
+
+class BoardRowIn(BaseModel):
+    key: Optional[str] = None            # existing row
+    id: Optional[str] = None             # "new:<n>" for a row created in this edit
+    label: str = Field(..., max_length=200)
+
+
+class BoardRowDeletion(BaseModel):
+    key: str
+    move_to: str                         # existing key or a "new:<n>" id
+
+
+class BoardRowsPlan(BaseModel):
+    rows: list[BoardRowIn] = Field(..., min_length=1, max_length=50)
+    deletions: list[BoardRowDeletion] = Field(default_factory=list, max_length=50)
 
 
 class TodoReorderItem(BaseModel):
@@ -860,7 +879,8 @@ async def list_projects(include_archived: bool = Query(default=False)):
 
     computed_deadlines = _compute_project_deadlines(todos_by_project)
 
-    grouped: dict[str, list[dict]] = {c: [] for c in db.CATEGORIES}
+    rows = db.list_rows(conn)
+    grouped: dict[str, list[dict]] = {r["key"]: [] for r in rows}
     for r in proj_rows:
         proj = _project_to_dict(r)
         proj["todos"] = todos_by_project.get(proj["id"], [])
@@ -868,7 +888,8 @@ async def list_projects(include_archived: bool = Query(default=False)):
         grouped.setdefault(proj["category"], []).append(proj)
 
     return {
-        "categories": db.CATEGORIES,
+        "categories": [r["key"] for r in rows],
+        "rows": [{"key": r["key"], "label": r["label"], "locked": r["locked"]} for r in rows],
         "projects": grouped,
     }
 
@@ -886,6 +907,10 @@ async def sync_board_order():
         "schema_version": 2,
         "generated_at": _now(),
         "rows": board_order.build_board_order(db.get_conn()),
+        # Optional (older clients ignore it): the user's rows, top to bottom.
+        "row_definitions": [
+            {"key": r["key"], "label": r["label"]} for r in db.list_rows()
+        ],
     }
 
 
@@ -1907,6 +1932,42 @@ async def search_todos(
     # Exact-id hits first, then active, then completed; otherwise preserve insertion order
     results.sort(key=lambda r: (r["todo"]["id"] not in id_tokens, bool(r["todo"]["completed"])))
     return {"q": q, "results": results}
+
+
+@app.get("/api/rows")
+async def list_board_rows():
+    """The board's rows (priority tiers), top to bottom, with project counts."""
+    return {"rows": db.list_rows()}
+
+
+@app.put("/api/rows")
+async def apply_board_rows(payload: BoardRowsPlan):
+    """Apply a row-editor session (rename, add, reorder, delete + move) atomically."""
+    try:
+        rows = db.apply_row_plan(
+            [item.model_dump() for item in payload.rows],
+            [item.model_dump() for item in payload.deletions],
+        )
+    except db.RowError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    _notify_change()
+    return {"rows": rows}
+
+
+@app.post("/api/onboarding/complete")
+async def complete_onboarding():
+    """Dismiss the first-run welcome tour."""
+    db.set_onboarding_pending(False)
+    _notify_change()
+    return db.get_settings()
+
+
+@app.post("/api/onboarding/restart")
+async def restart_onboarding():
+    """Show the welcome tour again (Settings → Show welcome tour)."""
+    db.set_onboarding_pending(True)
+    _notify_change()
+    return db.get_settings()
 
 
 @app.get("/api/settings")

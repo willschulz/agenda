@@ -16,6 +16,7 @@ Use an eight-second timeout for reads so a closed app fails quickly.
 | `POST` | `/api/todos/<id>/complete` | Complete a todo |
 | `POST` | `/api/todos/<id>/uncomplete` | Reopen a todo |
 | `POST` | `/api/usage/events` | Submit AI usage (see [`USAGE_EVENTS.md`](USAGE_EVENTS.md)) |
+| `GET` | `/api/rows` | Read the board's rows (priority tiers), top to bottom |
 
 Todo placement fields:
 
@@ -24,6 +25,11 @@ Todo placement fields:
   human-owned choice, not a synonym for follow-up.
 - `is_followup` is accepted temporarily as a deprecated input alias for
   `for_later`; new integrations must use `for_later`.
+
+Rows are user-defined. A project's `category` is a row `key` from
+`GET /api/rows` (or the `rows` list in `GET /api/projects`). Show users the
+row's `label`, never the key. Agents shouldn't rename, add, or delete rows;
+people do that in **Settings → Edit Rows**.
 
 ## Health check
 

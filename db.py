@@ -26,14 +26,22 @@ DB_PATH = Path(os.environ.get(
     str(Path(__file__).resolve().parent / "data" / "agenda.db"),
 ))
 
-CATEGORIES = (
-    "top_of_mind",
-    "near_publication",
-    "in_development",
-    "early_stage",
-    "side_project",
-    "future_ideas",
+# The default board rows ("priority tiers"). Users can rename, add, reorder,
+# and delete rows (see board_rows below); these are only the starting set.
+# top_of_mind is special: always first, never deleted, manually ordered.
+TOP_ROW = "top_of_mind"
+DEFAULT_ROWS: tuple[tuple[str, str], ...] = (
+    ("top_of_mind", "Top of Mind"),
+    ("near_publication", "Near Publication"),
+    ("in_development", "In Development"),
+    ("early_stage", "Early Stage"),
+    ("side_project", "Side Projects"),
+    ("future_ideas", "Future Ideas"),
 )
+# Default row keys, kept for callers that predate editable rows. Live code
+# should use row_keys(), which reflects the user's own rows.
+CATEGORIES = tuple(key for key, _ in DEFAULT_ROWS)
+ROW_LABEL_MAX = 60
 
 SCHEMA_SQL = f"""
 PRAGMA foreign_keys = ON;
@@ -49,8 +57,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS projects (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   name            TEXT    NOT NULL,
-  category        TEXT    NOT NULL CHECK (category IN
-                    {tuple(CATEGORIES)}),
+  category        TEXT    NOT NULL,
   display_order   INTEGER NOT NULL DEFAULT 0,
   deadline        TEXT,
   notes           TEXT    NOT NULL DEFAULT '',
@@ -82,6 +89,14 @@ CREATE TABLE IF NOT EXISTS todos (
 CREATE INDEX IF NOT EXISTS idx_todos_project      ON todos(project_id);
 CREATE INDEX IF NOT EXISTS idx_todos_parent       ON todos(parent_id);
 CREATE INDEX IF NOT EXISTS idx_todos_completed_at ON todos(completed_at);
+
+CREATE TABLE IF NOT EXISTS board_rows (
+  key             TEXT    PRIMARY KEY,
+  label           TEXT    NOT NULL,
+  position        INTEGER NOT NULL,
+  created_at      TEXT    NOT NULL,
+  updated_at      TEXT    NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS day_overrides (
   date TEXT PRIMARY KEY   -- ISO date YYYY-MM-DD; presence = "flipped" from natural state
@@ -535,8 +550,8 @@ def _migrate_add_top_of_mind_category(conn: sqlite3.Connection) -> None:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
     ).fetchone()
-    if row and "top_of_mind" in row[0]:
-        return  # already migrated
+    if row is None or "CHECK (category IN" not in row[0] or "top_of_mind" in row[0]:
+        return  # already migrated, or the CHECK is gone (editable rows)
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         conn.execute("BEGIN")
@@ -572,7 +587,7 @@ def _migrate_add_future_ideas_category(conn: sqlite3.Connection) -> None:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
     ).fetchone()
-    if row and "future_ideas" in row[0]:
+    if row is None or "CHECK (category IN" not in row[0] or "future_ideas" in row[0]:
         return
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
@@ -804,6 +819,7 @@ def get_settings() -> dict:
         "vel_goal": row["vel_goal"],
         "retire_hours": row["retire_hours"],
         "ip_effort_limit": row["ip_effort_limit"],
+        "onboarding_pending": bool(row["onboarding_pending"]) if "onboarding_pending" in row.keys() else False,
     }
 
 
@@ -865,6 +881,9 @@ def init_schema() -> None:
     _migrate_rekey_schema2_launch_revisions(conn)
     _migrate_add_usage_tables(conn)
     _migrate_add_quota_tables(conn)
+    _migrate_add_board_rows(conn)
+    _migrate_drop_project_category_check(conn)
+    _migrate_add_onboarding_flag(conn)
 
 
 def _migrate_add_quota_tables(conn: sqlite3.Connection) -> None:
@@ -895,3 +914,301 @@ def transaction() -> Iterator[sqlite3.Connection]:
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:
     return dict(row) if row is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Editable board rows ("priority tiers")
+# ---------------------------------------------------------------------------
+
+def _migrate_add_board_rows(conn: sqlite3.Connection) -> None:
+    """Idempotent: create board_rows and seed it with the default rows.
+
+    Any category already used by a project but missing from the table (only
+    possible after a manual edit) is appended, so no project is orphaned.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS board_rows (
+          key             TEXT    PRIMARY KEY,
+          label           TEXT    NOT NULL,
+          position        INTEGER NOT NULL,
+          created_at      TEXT    NOT NULL,
+          updated_at      TEXT    NOT NULL
+        )
+    """)
+    if conn.execute("SELECT COUNT(*) FROM board_rows").fetchone()[0] == 0:
+        now = _row_now()
+        conn.executemany(
+            "INSERT INTO board_rows (key, label, position, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [(key, label, i, now, now) for i, (key, label) in enumerate(DEFAULT_ROWS)],
+        )
+    known = {r[0] for r in conn.execute("SELECT key FROM board_rows").fetchall()}
+    used = [r[0] for r in conn.execute(
+        "SELECT DISTINCT category FROM projects ORDER BY category").fetchall()]
+    for key in used:
+        if key not in known:
+            pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM board_rows").fetchone()[0]
+            now = _row_now()
+            conn.execute(
+                "INSERT INTO board_rows (key, label, position, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (key, key.replace("_", " ").title(), pos, now, now),
+            )
+            known.add(key)
+
+
+def _migrate_drop_project_category_check(conn: sqlite3.Connection) -> None:
+    """Idempotent: remove the fixed CHECK on projects.category.
+
+    Rows are now user-defined, so valid categories live in board_rows and are
+    enforced by the API. SQLite can't drop a CHECK in place, so this rebuilds
+    the table from its *live* definition (whatever columns earlier migrations
+    added), copies every row, and recreates the table's indexes and triggers.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
+    ).fetchone()
+    if row is None or "CHECK (category IN" not in row[0]:
+        return
+    create_sql = row[0]
+    start = create_sql.index("CHECK (category IN")
+    depth = 0
+    end = None
+    for i in range(start + len("CHECK "), len(create_sql)):
+        ch = create_sql[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        raise RuntimeError("could not parse the projects.category CHECK constraint")
+    new_sql = create_sql[:start].rstrip() + create_sql[end:]
+    new_sql = 'CREATE TABLE "projects_new" ' + new_sql[new_sql.index("("):]
+    extras = [r[0] for r in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE tbl_name='projects' "
+        "AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type, name"
+    ).fetchall()]
+    columns = [r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()]
+    col_list = ", ".join(f'"{c}"' for c in columns)
+
+    seq_row = conn.execute(
+        "SELECT seq FROM sqlite_sequence WHERE name = 'projects'").fetchone()
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA legacy_alter_table = ON")
+    try:
+        conn.execute("BEGIN")
+        conn.execute(new_sql)
+        conn.execute(
+            f"INSERT INTO projects_new ({col_list}) SELECT {col_list} FROM projects")
+        conn.execute("DROP TABLE projects")
+        conn.execute("ALTER TABLE projects_new RENAME TO projects")
+        for sql in extras:
+            conn.execute(sql)
+        if seq_row is not None:
+            # Keep AUTOINCREMENT from reusing ids of deleted projects.
+            conn.execute(
+                "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'projects'",
+                (seq_row[0],))
+        problems = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if problems:
+            raise RuntimeError(
+                f"foreign key check failed after rebuilding projects: {len(problems)} rows")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute("PRAGMA legacy_alter_table = OFF")
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate_add_onboarding_flag(conn: sqlite3.Connection) -> None:
+    """Idempotent: settings.onboarding_pending (1 = show the welcome tour).
+
+    Defaults to 0, so existing databases never see the tour. seed.py sets it
+    on a brand-new database.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()}
+    if "onboarding_pending" not in cols:
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN onboarding_pending INTEGER NOT NULL DEFAULT 0")
+
+
+def _row_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class RowError(ValueError):
+    """A row edit that can't be applied; the message is shown to the user."""
+
+
+def list_rows(conn: sqlite3.Connection | None = None) -> list[dict]:
+    """Rows in display order, with active/archived project counts."""
+    conn = conn or get_conn()
+    counts = {
+        r["category"]: (r["active"], r["archived"])
+        for r in conn.execute(
+            "SELECT category, SUM(archived = 0) AS active, SUM(archived = 1) AS archived "
+            "FROM projects GROUP BY category"
+        ).fetchall()
+    }
+    out = []
+    for r in conn.execute(
+        "SELECT key, label, position FROM board_rows ORDER BY position, key"
+    ).fetchall():
+        active, archived = counts.get(r["key"], (0, 0))
+        out.append({
+            "key": r["key"],
+            "label": r["label"],
+            "position": r["position"],
+            "locked": r["key"] == TOP_ROW,
+            "project_count": int(active or 0),
+            "archived_count": int(archived or 0),
+        })
+    return out
+
+
+def row_keys(conn: sqlite3.Connection | None = None) -> list[str]:
+    conn = conn or get_conn()
+    return [r[0] for r in conn.execute(
+        "SELECT key FROM board_rows ORDER BY position, key").fetchall()]
+
+
+def row_labels(conn: sqlite3.Connection | None = None) -> dict[str, str]:
+    conn = conn or get_conn()
+    return {r[0]: r[1] for r in conn.execute("SELECT key, label FROM board_rows").fetchall()}
+
+
+def _clean_label(label: object) -> str:
+    text = " ".join(str(label or "").split())
+    if not text:
+        raise RowError("Row names can't be empty.")
+    if len(text) > ROW_LABEL_MAX:
+        raise RowError(f"Row names can be at most {ROW_LABEL_MAX} characters.")
+    return text
+
+
+def _new_row_key(label: str, taken: set[str]) -> str:
+    slug = "".join(ch if ch.isalnum() else "_" for ch in label.lower())
+    slug = "_".join(part for part in slug.split("_") if part)[:40] or "row"
+    key = slug
+    n = 2
+    while key in taken:
+        key = f"{slug}_{n}"
+        n += 1
+    return key
+
+
+def apply_row_plan(rows: list[dict], deletions: list[dict] | None = None) -> list[dict]:
+    """Apply a whole row-editor session atomically.
+
+    rows: the desired rows, top to bottom. Each is {"key": <existing key>,
+      "label": ...} or {"id": "new:<n>", "label": ...} for a new row.
+    deletions: [{"key": <existing key>, "move_to": <key or "new:<n>">}]. Every
+      existing row missing from `rows` must appear here. Its projects (active
+      and archived) move to the end of the target row.
+
+    Raises RowError, changing nothing, when the plan is invalid.
+    """
+    conn = get_conn()
+    existing = {r["key"]: r for r in list_rows(conn)}
+    if not isinstance(rows, list) or not rows:
+        raise RowError("The board needs at least one row.")
+
+    labels_seen: set[str] = set()
+    temp_ids: set[str] = set()
+    kept: list[str] = []
+    for item in rows:
+        label = _clean_label(item.get("label"))
+        folded = label.casefold()
+        if folded in labels_seen:
+            raise RowError(f'Two rows are both named "{label}".')
+        labels_seen.add(folded)
+        key = item.get("key")
+        if key is not None:
+            if key not in existing:
+                raise RowError(
+                    "One of these rows no longer exists. Reopen the editor and try again.")
+            if key in kept:
+                raise RowError("A row appears twice.")
+            kept.append(key)
+        else:
+            temp = str(item.get("id") or "")
+            if not temp.startswith("new:") or temp in temp_ids:
+                raise RowError("Each new row needs its own temporary id.")
+            temp_ids.add(temp)
+
+    if rows[0].get("key") != TOP_ROW:
+        raise RowError("Top of Mind always stays the first row.")
+
+    deleted: dict[str, str] = {}
+    for d in deletions or []:
+        key = d.get("key")
+        target = d.get("move_to")
+        if key not in existing:
+            raise RowError("One of the rows to delete no longer exists.")
+        if key == TOP_ROW:
+            raise RowError("The Top of Mind row can't be deleted.")
+        if key in kept:
+            raise RowError("A row can't be both kept and deleted.")
+        if target == key or (target not in kept and target not in temp_ids):
+            raise RowError(
+                f'Choose where the projects in "{existing[key]["label"]}" should go.')
+        deleted[key] = target
+    missing = set(existing) - set(kept) - set(deleted)
+    if missing:
+        names = ", ".join(sorted(existing[k]["label"] for k in missing))
+        raise RowError(f"Choose where the projects in {names} should go.")
+
+    now = _row_now()
+    with transaction() as tx:
+        taken = set(existing)
+        temp_to_key: dict[str, str] = {}
+        for item in rows:
+            if item.get("key") is None:
+                label = _clean_label(item["label"])
+                key = _new_row_key(label, taken)
+                taken.add(key)
+                temp_to_key[str(item["id"])] = key
+                tx.execute(
+                    "INSERT INTO board_rows (key, label, position, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (key, label, 10_000 + len(temp_to_key), now, now),
+                )
+        for old_key, target in deleted.items():
+            target_key = temp_to_key.get(target, target)
+            base = tx.execute(
+                "SELECT COALESCE(MAX(display_order), -1) + 1 FROM projects WHERE category = ?",
+                (target_key,),
+            ).fetchone()[0]
+            moving = tx.execute(
+                "SELECT id FROM projects WHERE category = ? ORDER BY display_order, id",
+                (old_key,),
+            ).fetchall()
+            for offset, project in enumerate(moving):
+                tx.execute(
+                    "UPDATE projects SET category = ?, display_order = ?, updated_at = ? "
+                    "WHERE id = ?",
+                    (target_key, base + offset, now, project["id"]),
+                )
+            tx.execute("DELETE FROM board_rows WHERE key = ?", (old_key,))
+        for position, item in enumerate(rows):
+            key = item.get("key") or temp_to_key[str(item["id"])]
+            label = _clean_label(item["label"])
+            tx.execute(
+                "UPDATE board_rows SET "
+                "updated_at = CASE WHEN label IS ? AND position IS ? THEN updated_at ELSE ? END, "
+                "label = ?, position = ? WHERE key = ?",
+                (label, position, now, label, position, key),
+            )
+    return list_rows(conn)
+
+
+def set_onboarding_pending(pending: bool) -> None:
+    get_conn().execute(
+        "UPDATE settings SET onboarding_pending = ? WHERE id = 1", (1 if pending else 0,))

@@ -347,25 +347,43 @@ public struct AgendaCanonicalSnapshotV2: Codable, Hashable, Sendable {
     }
 }
 
+/// One user-defined board row ("priority tier"), in display order.
+public struct AgendaRowDefinition: Codable, Hashable, Sendable {
+    public let key: String
+    public let label: String
+
+    public init(key: String, label: String) {
+        self.key = key
+        self.label = label
+    }
+}
+
 public struct AgendaBoardOrderSnapshot: Codable, Hashable, Sendable {
     public let schemaVersion: Int
     public let generatedAt: String
     public let rows: [String: [String]]
+    /// The user's rows, top to bottom. Optional: snapshots published before
+    /// rows became editable don't carry it, and clients then fall back to the
+    /// default rows.
+    public let rowDefinitions: [AgendaRowDefinition]?
 
     public init(
         schemaVersion: Int = agendaContractSchemaVersion,
         generatedAt: String,
-        rows: [String: [String]]
+        rows: [String: [String]],
+        rowDefinitions: [AgendaRowDefinition]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
         self.rows = rows
+        self.rowDefinitions = rowDefinitions
     }
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case generatedAt = "generated_at"
         case rows
+        case rowDefinitions = "row_definitions"
     }
 }
 
