@@ -1,3 +1,4 @@
+import AgendaSyncCore
 import Foundation
 #if DEBUG
 import os
@@ -152,10 +153,44 @@ struct AgendaProjectCardModel: Identifiable, Hashable {
 }
 
 struct AgendaBoardSection: Identifiable, Hashable {
-    let category: AgendaCategory
+    /// The row key stored in each project's `category`.
+    let key: String
+    /// The row's display name: the user's label when the Mac has synced one.
+    let title: String
     let projects: [AgendaProjectCardModel]
 
-    var id: String { category.id }
+    var id: String { key }
+}
+
+extension AgendaBoardSection {
+    /// Rows in display order: the user's synced rows when available, else the
+    /// six defaults. Any category used by a project but missing from that list
+    /// (a row created after this snapshot, or an older Mac) is appended so its
+    /// projects are never hidden.
+    static func rowOrder(
+        definitions: [AgendaRowDefinition]?,
+        usedCategories: Set<String>
+    ) -> [(key: String, title: String)] {
+        var rows: [(key: String, title: String)]
+        if let definitions, !definitions.isEmpty {
+            rows = definitions.map { ($0.key, $0.label) }
+        } else {
+            rows = AgendaCategory.allCases.map { ($0.rawValue, $0.title) }
+        }
+        let known = Set(rows.map(\.key))
+        for key in usedCategories.subtracting(known).sorted() {
+            rows.append((key, fallbackTitle(for: key)))
+        }
+        return rows
+    }
+
+    static func fallbackTitle(for key: String) -> String {
+        if let category = AgendaCategory(rawValue: key) { return category.title }
+        return key
+            .split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
 }
 
 struct AgendaBoardPresentation: Hashable {
@@ -164,7 +199,8 @@ struct AgendaBoardPresentation: Hashable {
     init(
         projects: [ProjectViewValue],
         todos: [TodoViewValue],
-        boardOrderRows: [String: [String]] = [:]
+        boardOrderRows: [String: [String]] = [:],
+        rowDefinitions: [AgendaRowDefinition]? = nil
     ) {
 #if DEBUG
         let signpostID = OSSignpostID(log: agendaPresentationLog)
@@ -198,14 +234,17 @@ struct AgendaBoardPresentation: Hashable {
             )
         }
 
-        sections = AgendaCategory.allCases.compactMap { category in
+        let rowOrder = AgendaBoardSection.rowOrder(
+            definitions: rowDefinitions,
+            usedCategories: Set(cards.map(\.project.category))
+        )
+        sections = rowOrder.compactMap { row in
             let ranks = Dictionary(
-                uniqueKeysWithValues: (
-                    boardOrderRows[category.rawValue] ?? []
-                ).enumerated().map { ($0.element, $0.offset) }
+                (boardOrderRows[row.key] ?? []).enumerated().map { ($0.element, $0.offset) },
+                uniquingKeysWith: { first, _ in first }
             )
             let categoryProjects = cards
-                .filter { $0.project.category == category.rawValue }
+                .filter { $0.project.category == row.key }
                 .sorted {
                     let leftRank = ranks[$0.id]
                     let rightRank = ranks[$1.id]
@@ -224,7 +263,8 @@ struct AgendaBoardPresentation: Hashable {
                 }
             guard !categoryProjects.isEmpty else { return nil }
             return AgendaBoardSection(
-                category: category,
+                key: row.key,
+                title: row.title,
                 projects: categoryProjects
             )
         }

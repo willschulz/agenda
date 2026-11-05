@@ -19,7 +19,8 @@ struct AgendaApp: App {
 
     init() {
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
+            // A sandbox copy never checks for or installs updates.
+            startingUpdater: !AgendaRuntime.isSandbox,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
@@ -43,7 +44,9 @@ struct AgendaApp: App {
                 .frame(minWidth: 480, minHeight: 400)
                 .task {
                     appDelegate.supervisor = serverController.supervisor
-                    await LegacyCredentialCleaner.runIfNeeded()
+                    if !AgendaRuntime.isSandbox {
+                        await LegacyCredentialCleaner.runIfNeeded()
+                    }
                     await serverController.start()
                 }
         }
@@ -91,7 +94,7 @@ struct SettingsView: View {
             create: true
         ) else { return }
         let backups = support
-            .appendingPathComponent("Agenda", isDirectory: true)
+            .appendingPathComponent(AgendaRuntime.dataFolderName, isDirectory: true)
             .appendingPathComponent("backups", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: backups,

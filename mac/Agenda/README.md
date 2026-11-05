@@ -52,6 +52,24 @@ cd mac/Agenda
 ./install.sh --no-build  # re-bundle the existing binary without recompiling
 ```
 
+## Try the first-run experience safely
+
+```bash
+cd mac/Agenda
+./scripts/try-first-run.sh            # build "Agenda Sandbox", wipe its data, launch
+./scripts/try-first-run.sh --keep     # relaunch without wiping the sandbox data
+./scripts/try-first-run.sh --clean    # quit the sandbox and delete its data
+```
+
+This builds a separate **Agenda Sandbox** app (into `dist/sandbox/`, never
+`~/Applications`) and launches it with a brand-new data folder, so you see
+exactly what a new user sees: the starter board and the welcome tour. It runs
+alongside your normal Agenda. It has its own bundle ID, data folder
+(`~/Library/Application Support/Agenda Sandbox`), and port (8562), and it is
+ad-hoc signed with no entitlements. It can't sync to iCloud, check for
+updates, or register at login, and `AgendaRuntime.swift` refuses those in
+code too.
+
 ## Quick iteration without bundling
 
 ```bash

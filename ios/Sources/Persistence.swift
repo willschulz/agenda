@@ -177,6 +177,8 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
     @Published private(set) var oldestPendingMutationAt: Date?
     @Published private(set) var conflicts: [AgendaTodoConflict] = []
     @Published private(set) var boardOrderRows: [String: [String]] = [:]
+    /// The user's rows from the Mac (nil until a snapshot carrying them arrives).
+    @Published private(set) var rowDefinitions: [AgendaRowDefinition]?
     @Published private(set) var heldDeletionBatch: AgendaHeldDeletionBatch?
 
     private let container: ModelContainer
@@ -246,6 +248,9 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
         if boardOrderRows != snapshot.rows {
             boardOrderRows = snapshot.rows
         }
+        if rowDefinitions != snapshot.rowDefinitions {
+            rowDefinitions = snapshot.rowDefinitions
+        }
         try? context.save()
     }
 
@@ -260,6 +265,9 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
         else { return }
         if boardOrderRows != snapshot.rows {
             boardOrderRows = snapshot.rows
+        }
+        if rowDefinitions != snapshot.rowDefinitions {
+            rowDefinitions = snapshot.rowDefinitions
         }
     }
 

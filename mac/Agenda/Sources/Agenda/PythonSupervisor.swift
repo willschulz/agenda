@@ -24,7 +24,7 @@ final class PythonSupervisor: ObservableObject {
     @Published private(set) var status: PythonStatus = .stopped
     @Published private(set) var logLines: [String] = []
 
-    let port = 8552
+    let port = AgendaRuntime.port
     var localURL: URL { URL(string: "http://127.0.0.1:\(port)/")! }
 
     private var process: Process?
@@ -195,7 +195,7 @@ final class PythonSupervisor: ObservableObject {
             appropriateFor: nil,
             create: true
         )
-        let directory = base.appendingPathComponent("Agenda", isDirectory: true)
+        let directory = base.appendingPathComponent(AgendaRuntime.dataFolderName, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }

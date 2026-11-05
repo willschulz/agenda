@@ -59,6 +59,7 @@ final class LocalServerController: ObservableObject {
         guard
             #available(macOS 14.0, *),
             cloudCoordinator == nil,
+            !AgendaRuntime.isSandbox,
             Self.hasAgendaCloudKitEntitlement()
         else { return }
         let coordinator = CloudKitCoordinator()
