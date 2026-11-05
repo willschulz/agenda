@@ -37,8 +37,8 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
 ## Features
 
 - **Rows as priority tiers**: portrait-aspect project cards arranged in rows,
-  highest priority at the top. A board starts with Top of Mind, Near
-  Publication, In Development, Early Stage, Side Projects, and Future Ideas.
+  highest priority at the top. A new board starts with Top of Mind, Near
+  Publication, In Development, Early Stage, and Future Ideas.
   **Settings → Edit Rows** renames, adds, reorders, and deletes rows on a
   zoomed-out view of the board, and asks where a deleted row's projects go.
 - **First-run welcome tour**: a new board opens a short tour that explains the
