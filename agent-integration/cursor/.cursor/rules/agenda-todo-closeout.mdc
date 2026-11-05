@@ -1,0 +1,125 @@
+---
+description: Close an Agenda todo session with a lab note, review handoff, approval-gated updates, and running-state cleanup
+alwaysApply: true
+---
+# Agenda todo closeout
+
+Apply this after materially advancing or completing a tracked Agenda todo, or
+when handing the work to another session.
+
+## 1. Write one concise lab note first
+
+This append is the only closeout write that does not require approval.
+
+If the todo remains open, append 2–4 sentences covering what changed, current
+state, next action, and important gotchas:
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/json' \
+  -d '{"text":"<concise update>","author":"agent"}' \
+  http://127.0.0.1:8552/api/todos/<todo_id>/notes
+```
+
+If the todo is completing, review its existing notes and append a 2–4 sentence
+project-level rollup of durable outcomes:
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/json' \
+  -d '{"text":"<durable project rollup>","author":"agent"}' \
+  http://127.0.0.1:8552/api/projects/<project_id>/notes
+```
+
+Append an additional todo note only when an important task-specific gotcha
+would otherwise be lost.
+
+## 2. Preserve human review
+
+If the agent changed code, configuration, deployed artifacts, or generated
+content that the human has not reviewed live, leave the original todo open and
+propose a needs-review todo:
+
+- short title, at most eight words;
+- `parent_id` equal to the original todo id, making review the antecedent's
+  top child;
+- `for_later: false`;
+- `awaiting_review: true`;
+- notes containing an executive summary and concrete verification steps;
+- paths to changed artifacts plus `todo #<original_id>`.
+
+If the antecedent is already parked in `Later…`, place review at the top of
+the project's main list instead; nesting under it would hide the review.
+Create the review todo only after approval. Research, discussion, bookkeeping,
+and work already reviewed live do not require this handoff.
+
+Follow-up is a placement relationship, not a flag. Work that blocks an
+antecedent's completion is its child. Genuine subsequent work that does not
+block completion is the sibling immediately below it. `for_later` is
+human-owned parking for a speculative nice-to-have; agents must never set it
+or move work into Later without explicit per-item approval.
+
+## 3. Propose five buckets
+
+Present one consolidated, approval-gated proposal:
+
+1. New follow-up todos, including placement and concise notes.
+2. Whether the current todo should be completed.
+3. Project northstar or path updates.
+4. Sibling reprioritization.
+5. Documentation updates required by changed behavior.
+
+Default to leaving super-tasks open until their underlying question is settled.
+Default to leaving unreviewed agent-built work open.
+
+## 4. Apply approved changes in order
+
+After explicit approval:
+
+1. Create approved todos.
+2. Reorder or reparent with the full sibling list if needed.
+3. Apply approved project northstar/path updates.
+4. Apply approved documentation changes and commit only when the user's
+   repository workflow authorizes it.
+5. Complete the current todo last, if approved.
+6. Always clear the agent's own `running` flag when leaving the todo open:
+
+```bash
+curl -sS -X PATCH -H 'Content-Type: application/json' \
+  -d '{"running":false}' \
+  http://127.0.0.1:8552/api/todos/<todo_id>
+```
+
+Never set or clear `in_progress`; it belongs to the human. Completion clears
+all status flags automatically.
+
+## API payloads
+
+Create a normal todo:
+
+```json
+{
+  "project_id": 1,
+  "parent_id": null,
+  "text": "Short todo title",
+  "notes": ["Why this matters and how to verify it."],
+  "paths": ["path/to/context"]
+}
+```
+
+Create a needs-review child:
+
+```json
+{
+  "project_id": 1,
+  "parent_id": 123,
+  "for_later": false,
+  "awaiting_review": true,
+  "text": "Verify implemented change",
+  "notes": ["Summary and step-by-step verification."],
+  "paths": ["path/to/change", "todo #123"]
+}
+```
+
+After creation, reorder the full child list so the review has
+`display_order: 0` and existing children follow in 10-point gaps. If no
+suitable main-list antecedent exists, use `parent_id: null` and pin review at
+the top of the main roots.

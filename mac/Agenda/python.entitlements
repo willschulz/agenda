@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Entitlements for the bundled CPython interpreter
+         (Contents/Resources/python/bin/python3.13).
+
+         Deliberately empty. Entitlements are per-binary and are NOT inherited
+         from the host app, so the interpreter needs its own file — but it
+         needs nothing in it: the app's own entitlements already cover the
+         network, and every dylib and .so the interpreter loads is re-signed
+         with the same Team ID, so library validation passes unaided.
+
+         If a Developer ID build ever fails at launch with a dyld
+         "code signature ... not valid for use in process" error, the single
+         exception to add is:
+
+             <key>com.apple.security.cs.disable-library-validation</key>
+             <true/>
+
+         Add it only in response to an actual failure. It is the weakest
+         hardening exception available and shipping it speculatively would
+         let any same-path unsigned library load into the interpreter. -->
+</dict>
+</plist>

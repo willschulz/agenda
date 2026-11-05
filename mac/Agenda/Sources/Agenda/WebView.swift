@@ -1,0 +1,274 @@
+import AppKit
+import SwiftUI
+import WebKit
+
+// MARK: - WebViewState
+
+/// Observable state published by the WKWebView navigation delegate.
+/// ContentView reads this to decide whether to show the live page or a
+/// native "can't reach Agenda" fallback. This is the cheap hook Phase 2
+/// will later replace with real offline-mode switching -- not throwaway.
+final class WebViewState: ObservableObject {
+    @Published var isLoading: Bool = true
+    @Published var loadError: String? = nil
+
+    /// Direct reference to the WKWebView -- NOT @Published so it doesn't
+    /// trigger re-renders. Used for the Reload menu command and any future
+    /// Swift->JS calls.
+    weak var webView: WKWebView? = nil
+
+    func reload() {
+        loadError = nil
+        webView?.reload()
+    }
+}
+
+// MARK: - Clipboard bridge
+
+/// Fallback for `navigator.clipboard.writeText` when WKWebView's built-in
+/// implementation is unavailable or rejects (a known WebKit restriction
+/// tied to user-gesture attribution -- can be stricter for some synthetic
+/// or indirectly-attributed clicks than in a full browser). Agenda's own
+/// code (agenda/static/index.html) is untouched -- this patches the API at
+/// the WebView layer via an injected user script, so the web app keeps
+/// calling navigator.clipboard.writeText exactly as it does today.
+///
+/// The JS shim always tries the native API first and only falls back to
+/// this bridge on rejection, so this is pure insurance, not a replacement.
+private let clipboardBridgeMessageHandlerName = "agendaClipboard"
+
+private let clipboardBridgeScriptSource = """
+(function () {
+  if (window.__agendaMacClipboardPatched) return;
+  window.__agendaMacClipboardPatched = true;
+
+  var nativeWriteText = (navigator.clipboard && navigator.clipboard.writeText)
+    ? navigator.clipboard.writeText.bind(navigator.clipboard)
+    : null;
+
+  function bridgeWriteText(text) {
+    try {
+      window.webkit.messageHandlers.\(clipboardBridgeMessageHandlerName).postMessage(String(text));
+      return Promise.resolve();
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  }
+
+  if (!navigator.clipboard) {
+    Object.defineProperty(navigator, 'clipboard', { value: {}, configurable: true });
+  }
+
+  navigator.clipboard.writeText = function (text) {
+    if (nativeWriteText) {
+      return nativeWriteText(text).catch(function () { return bridgeWriteText(text); });
+    }
+    return bridgeWriteText(text);
+  };
+})();
+"""
+
+final class ClipboardBridge: NSObject, WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == clipboardBridgeMessageHandlerName, let text = message.body as? String else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+}
+
+// MARK: - External links
+
+/// Note markdown (and any other `<a href>`) must not navigate the Agenda
+/// WKWebView: there is no back button, so an in-app load of GitHub/Docs/etc.
+/// traps the session until restart. http(s) opens in Google Chrome when that
+/// app is installed; other schemes use the system default handler.
+enum AgendaLinkPolicy {
+    static func shouldOpenExternally(_ url: URL, appOrigin: URL?) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), !scheme.isEmpty else { return false }
+        if scheme == "about" || scheme == "javascript" || scheme == "data" {
+            return false
+        }
+        if scheme == "http" || scheme == "https" {
+            guard let appOrigin else { return true }
+            return !isSameOrigin(url, appOrigin)
+        }
+        return true
+    }
+
+    static func isSameOrigin(_ a: URL, _ b: URL) -> Bool {
+        a.scheme?.lowercased() == b.scheme?.lowercased()
+            && a.host?.lowercased() == b.host?.lowercased()
+            && defaultPort(a) == defaultPort(b)
+    }
+
+    static func defaultPort(_ url: URL) -> Int {
+        if let port = url.port { return port }
+        switch url.scheme?.lowercased() {
+        case "https": return 443
+        case "http": return 80
+        default: return -1
+        }
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    static func open(_ url: URL) {
+        let scheme = url.scheme?.lowercased()
+        if scheme == "http" || scheme == "https",
+           let chrome = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") {
+            NSWorkspace.shared.open(
+                [url],
+                withApplicationAt: chrome,
+                configuration: NSWorkspace.OpenConfiguration()
+            ) { _, error in
+                if error != nil { NSWorkspace.shared.open(url) }
+            }
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+// MARK: - WebView
+
+/// NSViewRepresentable wrapping WKWebView for the local Agenda web app.
+/// Uses the default persistent WKWebsiteDataStore so cookies/localStorage
+/// survive across launches.
+struct WebView: NSViewRepresentable {
+    let url: URL
+    @ObservedObject var state: WebViewState
+
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        // The embedded server is available only on loopback.
+
+        let userScript = WKUserScript(
+            source: clipboardBridgeScriptSource,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        config.userContentController.addUserScript(userScript)
+        config.userContentController.add(context.coordinator.clipboardBridge, name: clipboardBridgeMessageHandlerName)
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.allowsBackForwardNavigationGestures = true
+        state.webView = webView
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.loadedURL != url else { return }
+        context.coordinator.loadedURL = url
+        webView.load(URLRequest(url: url))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(state: state) }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        let state: WebViewState
+        let clipboardBridge = ClipboardBridge()
+        var loadedURL: URL? = nil
+
+        init(state: WebViewState) { self.state = state }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            DispatchQueue.main.async {
+                self.state.isLoading = true
+                self.state.loadError = nil
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            DispatchQueue.main.async {
+                self.state.isLoading = false
+                self.state.loadError = nil
+                webView.window?.makeFirstResponder(webView)
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            DispatchQueue.main.async {
+                self.state.isLoading = false
+                if !AgendaLinkPolicy.isCancellation(error) {
+                    self.state.loadError = error.localizedDescription
+                }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            DispatchQueue.main.async {
+                self.state.isLoading = false
+                if !AgendaLinkPolicy.isCancellation(error) {
+                    self.state.loadError = error.localizedDescription
+                }
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+            let origin = loadedURL ?? webView.url
+            if AgendaLinkPolicy.shouldOpenExternally(url, appOrigin: origin) {
+                AgendaLinkPolicy.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url {
+                let origin = loadedURL ?? webView.url
+                if AgendaLinkPolicy.shouldOpenExternally(url, appOrigin: origin) {
+                    AgendaLinkPolicy.open(url)
+                } else {
+                    webView.load(navigationAction.request)
+                }
+            }
+            return nil
+        }
+
+        /// WKWebView does not present JavaScript confirm() dialogs unless its
+        /// UI delegate handles them. Agenda uses confirm() to guard destructive
+        /// task and project deletion, so silently returning false makes every
+        /// trash button appear broken in the native app.
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptConfirmPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping (Bool) -> Void
+        ) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = message
+            alert.informativeText = "This action cannot be undone."
+            alert.addButton(withTitle: "Delete")
+            alert.addButton(withTitle: "Cancel")
+
+            if let window = webView.window {
+                alert.beginSheetModal(for: window) { response in
+                    completionHandler(response == .alertFirstButtonReturn)
+                }
+            } else {
+                completionHandler(alert.runModal() == .alertFirstButtonReturn)
+            }
+        }
+    }
+}

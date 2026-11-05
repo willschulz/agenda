@@ -1,0 +1,21 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+
+# Swift / Xcode build artifacts and the vendored CPython runtime.
+# Path-agnostic so an app rename cannot silently un-ignore them.
+.build/
+.swiftpm/
+mac/*/vendor/
+dist/
+ios/*.xcodeproj/
+
+# Maintainer-specific privacy patterns (see scripts/verify-public.sh)
+.privacy-patterns.local

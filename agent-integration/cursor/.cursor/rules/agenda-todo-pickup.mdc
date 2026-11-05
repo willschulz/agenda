@@ -1,0 +1,83 @@
+---
+description: Pick up an Agenda todo through its local API, read context, and obtain plan approval before working
+alwaysApply: true
+---
+# Agenda todo pickup
+
+Apply this workflow only when the user identifies an Agenda todo or pastes a
+todo's Copy-button prompt. Do not query Agenda for unrelated requests.
+
+## 1. Resolve and read context
+
+If the pasted prompt already includes `todo_id`, `project_id`, notes, paths,
+and phase instructions, treat it as authoritative and do not resolve it again.
+Otherwise read:
+
+```bash
+curl -sS --max-time 8 http://127.0.0.1:8552/api/projects
+```
+
+If unreachable, launch Agenda, wait for its board, and retry once. If multiple
+todos plausibly match, ask the user which one they mean.
+
+Read context in this order:
+
+1. Project northstars.
+2. The 3–5 newest project lab notes.
+3. Project reference paths.
+4. Todo lab notes, newest first.
+5. Todo reference paths.
+
+Read only what is needed: roughly five files and three directories. Treat a
+directory as a search anchor rather than listing it exhaustively.
+
+## 2. Search related work
+
+When thematic siblings or prior work may matter, search 2–4 distinctive nouns:
+
+```bash
+curl -sS --max-time 8 \
+  "http://127.0.0.1:8552/api/search?q=<noun1+noun2>&include_completed=true"
+```
+
+Search is optional and non-blocking. Results use OR semantics, so filter noise
+and prioritize the same project, ancestors, active siblings, and relevant
+completed work.
+
+## 3. Summarize and propose
+
+Summarize in 5–10 lines:
+
+- what the todo asks for;
+- the most relevant context and paths;
+- overlapping or blocking work; and
+- any decision needed before implementation.
+
+Then propose either a short session plan or, for multi-session work, a
+2–5-item breakdown. Todo titles should be short (at most eight words); put
+rationale, scope, acceptance criteria, and paths in notes.
+
+Wait for explicit user confirmation before editing files, changing external
+state, creating todos, or starting substantive work.
+
+## 4. Mark agent activity
+
+After approval and immediately before substantive work:
+
+```bash
+curl -sS -X PATCH -H 'Content-Type: application/json' \
+  -d '{"running":true}' \
+  http://127.0.0.1:8552/api/todos/<todo_id>
+```
+
+`in_progress` is human-owned. Never set or clear it. `running` is agent-owned;
+set it only on the todo actually being worked and clear it at session end.
+Use at most one running todo per project.
+
+Breakdown-only sessions do not set `running`.
+
+## 5. Close out
+
+Follow the portable Agenda closeout rule in
+`agenda-todo-closeout.mdc`. Every substantive session leaves a concise lab
+note, preserves review gates, and clears the agent-owned `running` flag.

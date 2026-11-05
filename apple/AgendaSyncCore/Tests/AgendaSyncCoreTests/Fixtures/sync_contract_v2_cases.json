@@ -1,0 +1,269 @@
+{
+  "mutation_cases": [
+    {
+      "name": "fresh top-level todo create",
+      "canonical": {"schema_version": 2, "revision": -1, "structure_revision": 0, "deleted": false, "notes": {}, "exists": false},
+      "mutation": {"schema_version": 2, "mutation_id": "mc1", "device_id": "phone", "entity_id": "todo-new", "entity_kind": "todo", "operation": "create", "base_revision": 0, "proposed_payload": "{\"project_stable_id\":\"project-1\",\"text\":\"Created\"}"},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 0, "next_structure_revision": 0}
+    },
+    {
+      "name": "duplicate stable id create",
+      "canonical": {"schema_version": 2, "revision": 0, "structure_revision": 0, "deleted": false, "notes": {}, "exists": true},
+      "mutation": {"schema_version": 2, "mutation_id": "mc2", "device_id": "phone", "entity_id": "todo-existing", "entity_kind": "todo", "operation": "create", "base_revision": 0, "proposed_payload": "{\"project_stable_id\":\"project-1\",\"text\":\"Duplicate\"}"},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "entity_exists", "next_revision": 0, "next_structure_revision": 0}
+    },
+    {
+      "name": "fresh scalar edit",
+      "canonical": {"schema_version": 2, "revision": 7, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m1", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 7},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "identical mutation replay",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m1", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 7},
+      "prior_mutation": "same",
+      "expected": {"outcome": "idempotent", "reason": "mutation_replay", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "mutation id reused with different content",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m1", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 8},
+      "prior_mutation": "different",
+      "expected": {"outcome": "conflict", "reason": "mutation_id_reuse", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "stale scalar edit",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m2", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 7},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "stale_revision", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "stale independent note append",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {"note-a": "Existing"}},
+      "mutation": {"schema_version": 2, "mutation_id": "m3", "device_id": "phone", "entity_id": "todo-1", "operation": "note_append", "base_revision": 6, "note_id": "note-b", "note_payload": "New"},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 9, "next_structure_revision": 3}
+    },
+    {
+      "name": "duplicate note append",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {"note-a": "Existing"}},
+      "mutation": {"schema_version": 2, "mutation_id": "m4", "device_id": "phone", "entity_id": "todo-1", "operation": "note_append", "base_revision": 6, "note_id": "note-a", "note_payload": "Existing"},
+      "prior_mutation": "none",
+      "expected": {"outcome": "idempotent", "reason": "note_replay", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "divergent note id reuse",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {"note-a": "Existing"}},
+      "mutation": {"schema_version": 2, "mutation_id": "m5", "device_id": "phone", "entity_id": "todo-1", "operation": "note_append", "base_revision": 8, "note_id": "note-a", "note_payload": "Changed"},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "note_id_reuse", "next_revision": 8, "next_structure_revision": 3}
+    },
+    {
+      "name": "fresh structure edit",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m6", "device_id": "phone", "entity_id": "project-1", "entity_kind": "project", "operation": "structure_edit", "base_revision": 8, "base_structure_revision": 3},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 9, "next_structure_revision": 4}
+    },
+    {
+      "name": "stale project structure revision",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 4, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m7", "device_id": "phone", "entity_id": "project-1", "entity_kind": "project", "operation": "structure_edit", "base_revision": 8, "base_structure_revision": 3},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "stale_structure_revision", "next_revision": 8, "next_structure_revision": 4}
+    },
+    {
+      "name": "todo cannot own project structure mutation",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 4, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m7-kind", "device_id": "phone", "entity_id": "todo-1", "entity_kind": "todo", "operation": "structure_edit", "base_revision": 8, "base_structure_revision": 4},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "structure_kind_not_enabled", "next_revision": 8, "next_structure_revision": 4}
+    },
+    {
+      "name": "fresh tombstone creation",
+      "canonical": {"schema_version": 2, "revision": 8, "structure_revision": 3, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m8", "device_id": "phone", "entity_id": "todo-1", "operation": "delete", "base_revision": 8},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 9, "next_structure_revision": 3}
+    },
+    {
+      "name": "tombstone defeats stale edit",
+      "canonical": {"schema_version": 2, "revision": 9, "structure_revision": 3, "deleted": true, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m9", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 8},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "entity_deleted", "next_revision": 9, "next_structure_revision": 3}
+    },
+    {
+      "name": "interrupted delete acknowledgement replay",
+      "canonical": {"schema_version": 2, "revision": 9, "structure_revision": 3, "deleted": true, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m8", "device_id": "phone", "entity_id": "todo-1", "operation": "delete", "base_revision": 8},
+      "prior_mutation": "same",
+      "expected": {"outcome": "idempotent", "reason": "mutation_replay", "next_revision": 9, "next_structure_revision": 3}
+    },
+    {
+      "name": "explicit resurrection",
+      "canonical": {"schema_version": 2, "revision": 9, "structure_revision": 3, "deleted": true, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m10", "device_id": "phone", "entity_id": "todo-1", "operation": "resurrect", "base_revision": 9},
+      "prior_mutation": "none",
+      "expected": {"outcome": "accept", "reason": "accepted", "next_revision": 10, "next_structure_revision": 3}
+    },
+    {
+      "name": "schema one canonical requires republication",
+      "canonical": {"schema_version": 1, "revision": 0, "structure_revision": 0, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m11", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 0},
+      "prior_mutation": "none",
+      "expected": {"outcome": "quarantine", "reason": "canonical_upgrade_required"}
+    },
+    {
+      "name": "newer canonical schema",
+      "canonical": {"schema_version": 3, "revision": 1, "structure_revision": 0, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m12", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 1},
+      "prior_mutation": "none",
+      "expected": {"outcome": "quarantine", "reason": "newer_canonical_schema"}
+    },
+    {
+      "name": "mutation schema downgrade",
+      "canonical": {"schema_version": 2, "revision": 1, "structure_revision": 0, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 1, "mutation_id": "m13", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 1},
+      "prior_mutation": "none",
+      "expected": {"outcome": "quarantine", "reason": "schema_downgrade"}
+    },
+    {
+      "name": "newer mutation schema",
+      "canonical": {"schema_version": 2, "revision": 1, "structure_revision": 0, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 3, "mutation_id": "m14", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 1},
+      "prior_mutation": "none",
+      "expected": {"outcome": "quarantine", "reason": "newer_mutation_schema"}
+    },
+    {
+      "name": "future base revision",
+      "canonical": {"schema_version": 2, "revision": 4, "structure_revision": 0, "deleted": false, "notes": {}},
+      "mutation": {"schema_version": 2, "mutation_id": "m15", "device_id": "phone", "entity_id": "todo-1", "operation": "scalar_edit", "base_revision": 5},
+      "prior_mutation": "none",
+      "expected": {"outcome": "conflict", "reason": "future_revision", "next_revision": 4, "next_structure_revision": 0}
+    }
+  ],
+  "deletion_cases": [
+    {
+      "name": "missing baseline",
+      "entity_kind": "todo",
+      "baseline_count": null,
+      "deletion_count": 1,
+      "zone_deleted": false,
+      "expected": {"outcome": "quarantine", "reason": "baseline_required"}
+    },
+    {
+      "name": "zone deletion",
+      "entity_kind": "project",
+      "baseline_count": 20,
+      "deletion_count": 1,
+      "zone_deleted": true,
+      "expected": {"outcome": "quarantine", "reason": "zone_deletion"}
+    },
+    {
+      "name": "project absolute and relative boundary",
+      "entity_kind": "project",
+      "baseline_count": 20,
+      "deletion_count": 5,
+      "zone_deleted": false,
+      "expected": {"outcome": "accept", "reason": "within_guard"}
+    },
+    {
+      "name": "project above absolute boundary",
+      "entity_kind": "project",
+      "baseline_count": 100,
+      "deletion_count": 6,
+      "zone_deleted": false,
+      "expected": {"outcome": "quarantine", "reason": "collapse_guard"}
+    },
+    {
+      "name": "todo absolute and relative boundary",
+      "entity_kind": "todo",
+      "baseline_count": 200,
+      "deletion_count": 50,
+      "zone_deleted": false,
+      "expected": {"outcome": "accept", "reason": "within_guard"}
+    },
+    {
+      "name": "todo above absolute boundary",
+      "entity_kind": "todo",
+      "baseline_count": 1000,
+      "deletion_count": 51,
+      "zone_deleted": false,
+      "expected": {"outcome": "quarantine", "reason": "collapse_guard"}
+    },
+    {
+      "name": "todo relative boundary",
+      "entity_kind": "todo",
+      "baseline_count": 100,
+      "deletion_count": 25,
+      "zone_deleted": false,
+      "expected": {"outcome": "accept", "reason": "within_guard"}
+    },
+    {
+      "name": "todo above relative boundary",
+      "entity_kind": "todo",
+      "baseline_count": 100,
+      "deletion_count": 26,
+      "zone_deleted": false,
+      "expected": {"outcome": "quarantine", "reason": "collapse_guard"}
+    },
+    {
+      "name": "empty batch without baseline",
+      "entity_kind": "todo",
+      "baseline_count": null,
+      "deletion_count": 0,
+      "zone_deleted": false,
+      "expected": {"outcome": "accept", "reason": "empty_batch"}
+    }
+  ],
+  "fingerprint_cases": [
+    {
+      "name": "sorted semantic fields omit null transport values",
+      "fields": {"text": "Agenda", "ignored": null, "flagged": "true", "effort": "3"},
+      "expected": "24d8fe6b699f277075b05515635a4e86ae642b2470092c4da6cf563e272d2718"
+    },
+    {
+      "name": "unicode lengths use UTF-8 bytes",
+      "fields": {"text": "Review ☁️ sync", "author": "Zoë"},
+      "expected": "3048e066da9833cb1860f188cd16dbaa6e76384de4b4b9d505944f9a9319450b"
+    }
+  ],
+  "mutation_fingerprint_cases": [
+    {
+      "name": "mutation ID is excluded from semantic replay identity",
+      "mutation": {
+        "schema_version": 2,
+        "mutation_id": "m-fingerprint",
+        "device_id": "phone-a",
+        "entity_id": "todo-1",
+        "operation": "scalar_edit",
+        "base_revision": 7,
+        "proposed_payload": "{\"flagged\":true,\"text\":\"Changed\"}"
+      },
+      "expected": "a485c5dfcf36c0d497e6414593edbe6dc564ec3462709712c5ba031eb4fec93a"
+    }
+  ],
+  "result_cases": [
+    {
+      "name": "Mac-authored acceptance result",
+      "result": {
+        "schema_version": 2,
+        "mutation_id": "m1",
+        "mutation_fingerprint": "24d8fe6b699f277075b05515635a4e86ae642b2470092c4da6cf563e272d2718",
+        "device_id": "phone-a",
+        "entity_id": "todo-1",
+        "outcome": "accept",
+        "reason": "accepted",
+        "canonical_revision": 8,
+        "canonical_structure_revision": 3
+      },
+      "record_name": "result-m1"
+    }
+  ]
+}

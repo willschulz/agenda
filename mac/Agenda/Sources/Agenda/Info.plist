@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App identity -->
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleExecutable</key>
+    <string>Agenda</string>
+    <key>CFBundleName</key>
+    <string>Agenda</string>
+    <key>CFBundleDisplayName</key>
+    <string>Agenda</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.willschulz.Agenda</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Will Schulz. Licensed under the GNU GPL v3 or later.</string>
+
+    <!-- Version. CFBundleShortVersionString is the human-facing release;
+         CFBundleVersion is the build number and must increase monotonically
+         for Sparkle to recognize an update. -->
+    <key>CFBundleVersion</key>
+    <string>12</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.9.0</string>
+
+    <!-- Matches Package.swift's .macOS(.v13). Without this, an older Mac
+         launches the app and crashes on a missing symbol instead of being
+         told plainly that it needs a newer macOS. -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <!-- Sparkle update channel. The private EdDSA key lives only in the
+         developer's login Keychain; this bundle contains the public key. -->
+    <key>SUFeedURL</key>
+    <string>https://willschulz.github.io/agenda-releases/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>9J2IxJJOwMbCUsUQ/jbHSv5njLlDRhGe9cR+r+CxGgA=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+
+    <key>AgendaDefaultLaunchAtLogin</key>
+    <true/>
+
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "currency": "USD",
+  "unit": "USD per million tokens",
+  "notes": [
+    "API-equivalent list prices used only to estimate what usage would cost on pay-as-you-go API billing. They are not what a subscription user is billed.",
+    "A null rate means unknown: any usage needing that rate is reported as unpriced instead of guessed. Edit or extend this file to price more models.",
+    "cache_write_5m and cache_write_1h follow Anthropic's published 1.25x and 2x input multipliers. Rates with source 'checked' were reproduced against Claude Code's own cost totals."
+  ],
+  "models": {
+    "anthropic/claude-fable-5-1":   {"input": "10.00", "output": "50.00", "cache_read": "0.25", "cache_write_5m": "12.50", "cache_write_1h": "20.00", "source": "list"},
+    "anthropic/claude-fable-5":     {"input": "10.00", "output": "50.00", "cache_read": null,   "cache_write_5m": "12.50", "cache_write_1h": "20.00", "source": "list"},
+    "anthropic/claude-opus-5-5":    {"input": "4.00",  "output": "20.00", "cache_read": "0.20", "cache_write_5m": "5.00",  "cache_write_1h": "8.00",  "source": "checked",
+                                     "speed": {"fast": "2"}},
+    "anthropic/claude-opus-5":      {"input": "5.00",  "output": "25.00", "cache_read": null,   "cache_write_5m": "6.25",  "cache_write_1h": "10.00", "source": "list"},
+    "anthropic/claude-opus-4-8":    {"input": "5.00",  "output": "25.00", "cache_read": null,   "cache_write_5m": "6.25",  "cache_write_1h": "10.00", "source": "list"},
+    "anthropic/claude-opus-4-7":    {"input": "5.00",  "output": "25.00", "cache_read": null,   "cache_write_5m": "6.25",  "cache_write_1h": "10.00", "source": "list"},
+    "anthropic/claude-opus-4-6":    {"input": "5.00",  "output": "25.00", "cache_read": null,   "cache_write_5m": "6.25",  "cache_write_1h": "10.00", "source": "list"},
+    "anthropic/claude-sonnet-5-5":  {"input": "2.00",  "output": "10.00", "cache_read": "0.20", "cache_write_5m": "2.50",  "cache_write_1h": "4.00",  "source": "list"},
+    "anthropic/claude-sonnet-5":    {"input": "2.00",  "output": "10.00", "cache_read": "0.20", "cache_write_5m": "2.50",  "cache_write_1h": "4.00",  "source": "checked"},
+    "anthropic/claude-sonnet-4-6":  {"input": "3.00",  "output": "15.00", "cache_read": null,   "cache_write_5m": "3.75",  "cache_write_1h": "6.00",  "source": "list"},
+    "anthropic/claude-haiku-5-5":   {"input": "0.10",  "output": "0.50",  "cache_read": null,   "cache_write_5m": "0.125", "cache_write_1h": "0.20",  "source": "list"},
+    "anthropic/claude-haiku-4-5":   {"input": "1.00",  "output": "5.00",  "cache_read": null,   "cache_write_5m": "1.25",  "cache_write_1h": "2.00",  "source": "list"}
+  }
+}

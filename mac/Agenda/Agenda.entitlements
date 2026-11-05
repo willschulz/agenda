@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Non-sandboxed Developer ID build.
+         The app spawns a child CPython process from its own bundle and writes
+         the authoritative SQLite database to
+         ~/Library/Application Support/Agenda/ — neither is possible under the
+         default App Sandbox. -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Network client: WKWebView and supervisor health checks reach the
+         embedded localhost server; Sparkle checks the public update feed.
+         Agenda makes no outbound model-provider calls. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Network server: the embedded uvicorn listener on 127.0.0.1:8552. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Hardened runtime is required for notarization and is applied by
+         scripts/package-release.sh through codesign's "runtime" option.
+         No hardened-runtime exceptions are claimed:
+         * No JIT entitlement: WKWebView's JavaScript runs in Apple's separate
+           WebContent process, not in ours.
+         * No allow-dyld-environment-variables: the supervisor sets only
+           AGENDA and PYTHON variables on the child.
+         * No disable-library-validation: every nested dylib and .so is
+           re-signed with the same Team ID, so validation passes on its own.
+
+         Note: codesign parses this file with AMFIUnserializeXML, which is
+         stricter than plutil. A double hyphen inside an XML comment is
+         invalid XML and fails signing with "syntax error near line N", even
+         though plutil -lint reports OK. Avoid it here. -->
+</dict>
+</plist>
