@@ -50,10 +50,14 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
 - **Nested todos**: drag to reorder, nest, and move todos between projects.
 - **`in_progress` status**: a purple left bar with a play marker, toggled from
   each todo's hover controls. Completing a todo clears it.
-- **Effort points**: an optional integer weight per todo. Unpointed completed
-  todos count as 0.25. Points drive the daily-goal heatmap in the header.
-  Hovering a past day shows per-project task and point counts, and each
-  project expands to the exact completed tasks.
+- **Daily progress**: completed todos fill the daily-goal heatmap in the
+  header. Hovering a past day shows per-project counts, and each project
+  expands to the exact completed tasks.
+- **Effort points (optional)**: **Settings → Effort points** gives each todo a
+  weight (1, 2, 3, 5, 8, 13) for the heatmap, velocity, and in-progress limit.
+  Unpointed completed todos count as 0.25. When it's off, the default for new
+  boards, every task counts as 1 and point badges are hidden. Points already
+  set are kept and return when it's switched back on.
 - **Two-tier project context**:
   - **Northstars** (per project): durable goals and principles, pinned above
     the notes and read first by agents.

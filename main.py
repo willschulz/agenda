@@ -911,6 +911,8 @@ async def sync_board_order():
         "row_definitions": [
             {"key": r["key"], "label": r["label"]} for r in db.list_rows()
         ],
+        # Optional: when false, clients hide effort points (stored values are kept).
+        "points_enabled": db.points_enabled(),
     }
 
 
@@ -1708,16 +1710,21 @@ async def stats(
     # SQLite modifier to convert UTC stored timestamps → local calendar date.
     # getTimezoneOffset() is positive when local is behind UTC, so negate it.
     offset_modifier = f"{-tz_offset_minutes} minutes"
+    # With effort points off, every completed todo counts as 1. Stored points
+    # are untouched, so turning points back on restores the old weights.
+    points_on = db.points_enabled(conn)
+    unpointed = DEFAULT_UNPOINTED_EFFORT if points_on else 1.0
+    weight = "COALESCE(effort, ?)" if points_on else "?"
 
     rows = conn.execute(
         "SELECT date(completed_at, ?) AS day, project_id, "
-        "       SUM(COALESCE(effort, ?)) AS n "
+        f"       SUM({weight}) AS n "
         "FROM todos "
         "WHERE completed = 1 AND completed_at IS NOT NULL "
         "  AND date(completed_at, ?) >= date(?) "
         "GROUP BY day, project_id "
         "ORDER BY day, project_id",
-        (offset_modifier, DEFAULT_UNPOINTED_EFFORT, offset_modifier, since),
+        (offset_modifier, unpointed, offset_modifier, since),
     ).fetchall()
 
     by_day: dict[str, dict[str, float]] = {}
@@ -1727,12 +1734,12 @@ async def stats(
     accomplishment_rows = conn.execute(
         "SELECT date(t.completed_at, ?) AS day, t.id AS todo_id, "
         "       t.project_id, p.name AS project_name, t.text, "
-        "       COALESCE(t.effort, ?) AS effort "
+        f"       {weight.replace('effort', 't.effort')} AS effort "
         "FROM todos t JOIN projects p ON p.id = t.project_id "
         "WHERE t.completed = 1 AND t.completed_at IS NOT NULL "
         "  AND date(t.completed_at, ?) >= date(?) "
         "ORDER BY day DESC, t.completed_at DESC, t.id DESC",
-        (offset_modifier, DEFAULT_UNPOINTED_EFFORT, offset_modifier, since),
+        (offset_modifier, unpointed, offset_modifier, since),
     ).fetchall()
     accomplishments_by_day: dict[str, list[dict[str, Any]]] = {}
     for row in accomplishment_rows:
@@ -1757,6 +1764,7 @@ async def stats(
         "total_completed": int(total),
         "by_day": by_day,
         "accomplishments_by_day": accomplishments_by_day,
+        "points_enabled": points_on,
     }
 
 
@@ -1769,6 +1777,7 @@ class SettingsUpdate(BaseModel):
     vel_goal: Optional[float] = Field(default=None, ge=0.1, le=20.0)
     retire_hours: Optional[int] = Field(default=None, ge=1, le=720)
     ip_effort_limit: Optional[int] = Field(default=None, ge=1, le=200)
+    points_enabled: Optional[bool] = None
 
 
 class DayOverrideIn(BaseModel):

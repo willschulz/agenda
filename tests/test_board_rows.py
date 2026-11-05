@@ -151,7 +151,7 @@ class PreMigrationBackupTests(LegacyMigrationTests):
         db.init_schema()
         snaps = self.backups()
         self.assertEqual(len(snaps), 1)
-        self.assertIn("pre-migration-v0-to-v1-", snaps[0].name)
+        self.assertIn(f"pre-migration-v0-to-v{db.SCHEMA_VERSION}-", snaps[0].name)
         snap = sqlite3.connect(snaps[0])
         try:
             self.assertEqual(snap.execute("PRAGMA integrity_check").fetchone()[0], "ok")

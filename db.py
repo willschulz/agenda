@@ -46,7 +46,8 @@ ROW_LABEL_MAX = 60
 # Stored in SQLite's PRAGMA user_version after init_schema(). Bump it whenever
 # a migration is added, so the next launch takes a pre-migration backup first.
 #   1: editable board rows (board_rows, projects.category CHECK removed)
-SCHEMA_VERSION = 1
+#   2: settings.points_enabled (effort points can be switched off)
+SCHEMA_VERSION = 2
 PRE_MIGRATION_RETENTION = 5
 
 SCHEMA_SQL = f"""
@@ -820,13 +821,15 @@ def get_settings() -> dict:
     """Return the single settings row as a dict."""
     row = get_conn().execute("SELECT * FROM settings WHERE id = 1").fetchone()
     if row is None:
-        return {"daily_goal": 10, "vel_goal": 1.0, "retire_hours": 24, "ip_effort_limit": 100}
+        return {"daily_goal": 10, "vel_goal": 1.0, "retire_hours": 24, "ip_effort_limit": 100,
+                "onboarding_pending": False, "points_enabled": True}
     return {
         "daily_goal": row["daily_goal"],
         "vel_goal": row["vel_goal"],
         "retire_hours": row["retire_hours"],
         "ip_effort_limit": row["ip_effort_limit"],
         "onboarding_pending": bool(row["onboarding_pending"]) if "onboarding_pending" in row.keys() else False,
+        "points_enabled": bool(row["points_enabled"]) if "points_enabled" in row.keys() else True,
     }
 
 
@@ -847,6 +850,9 @@ def patch_settings(data: dict) -> dict:
     if "ip_effort_limit" in data:
         fields.append("ip_effort_limit = ?")
         values.append(int(data["ip_effort_limit"]))
+    if "points_enabled" in data:
+        fields.append("points_enabled = ?")
+        values.append(1 if data["points_enabled"] else 0)
     if fields:
         conn.execute(
             f"UPDATE settings SET {', '.join(fields)} WHERE id = 1",
@@ -936,6 +942,7 @@ def init_schema() -> None:
     _migrate_add_board_rows(conn)
     _migrate_drop_project_category_check(conn)
     _migrate_add_onboarding_flag(conn)
+    _migrate_add_points_enabled(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -1090,6 +1097,29 @@ def _migrate_add_onboarding_flag(conn: sqlite3.Connection) -> None:
     if "onboarding_pending" not in cols:
         conn.execute(
             "ALTER TABLE settings ADD COLUMN onboarding_pending INTEGER NOT NULL DEFAULT 0")
+
+
+def _migrate_add_points_enabled(conn: sqlite3.Connection) -> None:
+    """Idempotent: settings.points_enabled (1 = effort points are used).
+
+    Defaults to 1, so boards that already exist keep using their points.
+    seed.py turns it off for brand-new boards. Switching it off never touches
+    todos.effort; every task simply counts as 1 while it's off.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()}
+    if "points_enabled" not in cols:
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN points_enabled INTEGER NOT NULL DEFAULT 1")
+
+
+def points_enabled(conn: sqlite3.Connection | None = None) -> bool:
+    """Whether effort points are in use (True for boards from before the setting)."""
+    conn = conn or get_conn()
+    try:
+        row = conn.execute("SELECT points_enabled FROM settings WHERE id = 1").fetchone()
+    except sqlite3.OperationalError:
+        return True
+    return True if row is None else bool(row[0])
 
 
 def _row_now() -> str:
