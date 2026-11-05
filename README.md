@@ -353,6 +353,12 @@ using SQLite's Online Backup API. It keeps 30 self-contained, integrity-checked
 snapshots in `~/Library/Application Support/Agenda/backups/`. Use **Agenda →
 Settings → Reveal Backups in Finder** to see them.
 
+Before an update changes the database's structure, Agenda also saves a
+`pre-migration-v<old>-to-v<new>-<time>.db` snapshot in the same folder. These
+are kept separately from the rolling backups (the last five are kept). If
+that snapshot can't be written, Agenda doesn't start and leaves the database
+untouched.
+
 To restore a snapshot:
 
 1. Quit Agenda completely.

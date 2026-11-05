@@ -55,6 +55,11 @@ class FreshSchemaTests(TempDB):
         self.assertTrue(db.list_rows()[0]["locked"])
         self.assertFalse(db.get_settings()["onboarding_pending"])
 
+    def test_new_database_gets_no_pre_migration_snapshot(self):
+        self.assertEqual(list((self.path.parent / "backups").glob("pre-migration-*.db")), [])
+        self.assertEqual(
+            self.conn.execute("PRAGMA user_version").fetchone()[0], db.SCHEMA_VERSION)
+
     def test_init_schema_is_idempotent(self):
         db.init_schema()
         db.init_schema()
@@ -134,6 +139,45 @@ class LegacyMigrationTests(unittest.TestCase):
             "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='projects'")}
         self.assertIn("projects_sync_revision_after_update", triggers)
         db.init_schema()  # idempotent
+
+
+class PreMigrationBackupTests(LegacyMigrationTests):
+    """Reuses the legacy (pre-editable-rows) database from LegacyMigrationTests."""
+
+    def backups(self):
+        return sorted((self.path.parent / "backups").glob("pre-migration-*.db"))
+
+    def test_existing_database_is_snapshotted_once_before_migrating(self):
+        db.init_schema()
+        snaps = self.backups()
+        self.assertEqual(len(snaps), 1)
+        self.assertIn("pre-migration-v0-to-v1-", snaps[0].name)
+        snap = sqlite3.connect(snaps[0])
+        try:
+            self.assertEqual(snap.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            old_sql = snap.execute(
+                "SELECT sql FROM sqlite_master WHERE name='projects'").fetchone()[0]
+            self.assertIn("CHECK (category IN", old_sql)   # truly the pre-upgrade state
+        finally:
+            snap.close()
+        self.assertEqual(
+            db.get_conn().execute("PRAGMA user_version").fetchone()[0], db.SCHEMA_VERSION)
+        db.init_schema()
+        self.assertEqual(len(self.backups()), 1)       # up to date: no new snapshot
+
+    def test_failed_snapshot_changes_nothing(self):
+        def boom(**kwargs):
+            raise OSError("disk full")
+        original = db.create_backup
+        db.create_backup = boom
+        try:
+            with self.assertRaises(db.PreMigrationBackupError):
+                db.init_schema()
+        finally:
+            db.create_backup = original
+        sql = db.get_conn().execute(
+            "SELECT sql FROM sqlite_master WHERE name='projects'").fetchone()[0]
+        self.assertIn("CHECK (category IN", sql)
 
 
 class RowPlanTests(TempDB):
