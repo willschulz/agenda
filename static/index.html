@@ -2641,6 +2641,187 @@
   .pace-detail strong { color: var(--text); font-weight: 600; }
   .pace-note { font-size: 11px; color: var(--text-faint); }
   .pace-cell.is-inactive .pace-used, .pace-cell.is-unavailable .pace-used { color: var(--text-faint); }
+
+  /* ---- Edit Rows editor + first-run welcome tour ---- */
+  #rows-modal {
+    border: none;
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    padding: 0;
+    width: 920px;
+    max-width: calc(100vw - 32px);
+    max-height: 88vh;
+    margin: auto;  /* the global reset removes the UA's dialog centering */
+    background: var(--bg-elevated);
+    color: var(--text);
+    overflow: hidden;
+  }
+  #rows-modal[open] { display: flex; flex-direction: column; }
+  #rows-modal::backdrop { background: rgba(0,0,0,0.45); backdrop-filter: blur(2px); }
+  .rows-head {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 18px 22px 14px; border-bottom: 1px solid var(--border-soft);
+  }
+  .rows-head-text { flex: 1; min-width: 0; }
+  .rows-head h2 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0; }
+  .rows-head p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+  .rows-body { overflow-y: auto; padding: 16px 22px 18px; flex: 1; }
+  .rows-foot {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 22px; border-top: 1px solid var(--border-soft);
+  }
+  .rows-foot .spacer { flex: 1; }
+  .rows-btn {
+    padding: 8px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font: inherit; font-weight: 500; cursor: pointer;
+    transition: background .15s, border-color .15s, filter .15s;
+  }
+  .rows-btn:hover { background: var(--bg-hover); }
+  .rows-btn:disabled { opacity: .5; cursor: default; }
+  .rows-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .rows-btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+  .rows-btn.ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
+  .rows-btn.ghost:hover { color: var(--text); background: var(--bg-hover); }
+  .rows-btn.danger { color: var(--blocker-bar); }
+  .rows-btn.danger:hover { background: var(--blocker-bg); border-color: var(--blocker-bar); }
+  .rows-btn.small { padding: 4px 10px; font-size: 12px; }
+
+  /* The miniature board */
+  .mini-board {
+    display: flex; flex-direction: column; gap: 0;
+    background: var(--bg); border: 1px solid var(--border-soft);
+    border-radius: var(--radius); padding: 6px 10px;
+  }
+  .mini-row {
+    display: grid;
+    grid-template-columns: 22px minmax(150px, 230px) 1fr auto;
+    align-items: center; gap: 10px;
+    padding: 8px 4px; border-radius: var(--radius-sm);
+    transition: background .15s, opacity .2s;
+  }
+  .mini-row:hover { background: var(--bg-hover); }
+  .mini-row.is-new .mini-name input { border-color: var(--green); }
+  .mini-row.is-deleted { opacity: .55; }
+  .mini-row.is-deleted .mini-name input { text-decoration: line-through; }
+  .mini-row.sortable-ghost { opacity: .35; }
+  .mini-grip {
+    color: var(--text-faint); cursor: grab; display: inline-flex;
+    justify-content: center; align-items: center; height: 28px;
+  }
+  .mini-grip svg { width: 14px; height: 14px; }
+  .mini-grip.locked { cursor: default; color: var(--text-faint); }
+  .mini-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .mini-name input {
+    font: inherit; font-weight: 600; font-size: 14px; color: var(--text);
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; width: 100%;
+  }
+  .mini-name input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .mini-name input:disabled { background: transparent; border-color: transparent; }
+  .mini-sub { font-size: 11px; color: var(--text-faint); padding-left: 2px; }
+  .mini-track {
+    display: flex; gap: 6px; overflow: hidden; min-width: 0;
+    mask-image: linear-gradient(to right, #000 85%, transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 85%, transparent);
+  }
+  .mini-card {
+    flex: 0 0 auto; width: 78px; height: 46px; padding: 5px 6px;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 6px; box-shadow: var(--shadow-card);
+    font-size: 10px; line-height: 1.25; color: var(--text-muted);
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow-wrap: anywhere; hyphens: auto;
+  }
+  .mini-card.incoming { border-style: dashed; border-color: var(--accent); }
+  .mini-empty {
+    font-size: 12px; color: var(--text-faint); font-style: italic;
+    border: 1px dashed var(--border); border-radius: 6px; padding: 13px 10px;
+  }
+  .mini-more { font-size: 11px; color: var(--text-faint); align-self: center; padding: 0 4px; }
+  .mini-actions { display: flex; gap: 2px; }
+  .mini-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid transparent; background: transparent; color: var(--text-faint);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .mini-icon svg { width: 14px; height: 14px; }
+  .mini-icon:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--border); color: var(--text); }
+  .mini-icon.danger:hover:not(:disabled) { color: var(--blocker-bar); border-color: var(--blocker-bar); }
+  .mini-icon:disabled { opacity: .3; cursor: default; }
+  .mini-lock { font-size: 11px; color: var(--text-faint); white-space: nowrap; padding-right: 4px; }
+
+  /* Delete prompt and gaps between rows */
+  .mini-delete {
+    grid-column: 2 / -1;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    background: var(--blocker-bg); border: 1px solid var(--blocker-bar);
+    border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px;
+  }
+  .mini-delete select {
+    font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);
+  }
+  .mini-deleted-note { grid-column: 2 / -1; font-size: 12px; color: var(--text-muted); }
+  .mini-gap { position: relative; height: 10px; }
+  .mini-gap button {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font: inherit; font-size: 11px; font-weight: 600; color: var(--accent);
+    background: var(--bg-elevated); border: 1px solid var(--accent-soft);
+    border-radius: 999px; padding: 1px 10px; cursor: pointer;
+    opacity: 0; transition: opacity .15s;
+  }
+  .mini-gap:hover button, .mini-gap button:focus-visible { opacity: 1; }
+  .mini-gap::before {
+    content: ''; position: absolute; left: 30px; right: 4px; top: 50%;
+    border-top: 1px dashed var(--accent-soft); opacity: 0; transition: opacity .15s;
+  }
+  .mini-gap:hover::before { opacity: 1; }
+  .rows-add-end { margin-top: 10px; }
+  .rows-summary {
+    margin-top: 14px; font-size: 12px; color: var(--text-muted); line-height: 1.6;
+  }
+  .rows-summary strong { color: var(--text); font-weight: 600; }
+  .rows-error { color: var(--blocker-bar); font-size: 13px; }
+
+  /* Welcome tour */
+  .tour-steps { display: flex; gap: 6px; align-items: center; }
+  .tour-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background .2s, width .2s; }
+  .tour-dot.active { background: var(--accent); width: 18px; border-radius: 4px; }
+  .tour-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: center; }
+  .tour-hero h3 { font-family: var(--serif); font-size: 26px; font-weight: 600; margin: 0 0 10px; line-height: 1.2; }
+  .tour-hero p { margin: 0 0 10px; color: var(--text-muted); line-height: 1.55; font-size: 14px; }
+  .tour-tiers { display: flex; flex-direction: column; gap: 6px; }
+  .tour-tier {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: var(--radius-sm);
+    background: var(--bg); border: 1px solid var(--border-soft);
+    animation: tour-in .45s both;
+  }
+  .tour-tier .rank {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff; background: var(--accent);
+  }
+  .tour-tier .what { display: flex; flex-direction: column; min-width: 0; }
+  .tour-tier .what strong { font-size: 13px; }
+  .tour-tier .what span { font-size: 12px; color: var(--text-muted); }
+  .tour-arrow { font-size: 11px; color: var(--text-faint); text-align: center; letter-spacing: .04em; }
+  @keyframes tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .tour-tier { animation: none; } }
+  .tour-tips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .tour-tip {
+    border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+    padding: 12px 14px; background: var(--bg);
+  }
+  .tour-tip strong { display: block; font-size: 13px; margin-bottom: 4px; }
+  .tour-tip span { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+  .tour-intro { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+  @media (max-width: 640px) {
+    .tour-hero, .tour-tips { grid-template-columns: 1fr; }
+    .mini-row { grid-template-columns: 22px 1fr auto; }
+    .mini-track { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -2771,6 +2952,15 @@
       <span id="setting-usage-status"></span></p>
   </div>
   <div class="settings-group" style="margin-top:20px">
+    <label>Board rows</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="setting-edit-rows" class="rows-btn small" type="button">Edit Rows…</button>
+      <button id="setting-replay-tour" class="rows-btn small ghost" type="button">Show welcome tour</button>
+    </div>
+    <p class="settings-hint">Rename, add, reorder, or delete the board's rows (priority tiers).
+      Deleting a row asks where its projects should go.</p>
+  </div>
+  <div class="settings-group" style="margin-top:20px">
     <label>Appearance</label>
     <div class="theme-control">
       <button data-theme-btn="light">Light</button>
@@ -2827,6 +3017,8 @@
   <div class="usage-body" id="usage-body"></div>
 </dialog>
 
+<dialog id="rows-modal" aria-labelledby="rows-title"></dialog>
+
 <dialog id="project-modal">
   <form class="modal-form" id="project-form" method="dialog">
     <div class="modal-header">
@@ -2839,7 +3031,7 @@
         <input id="f-name" name="name" maxlength="200" autocomplete="off" />
       </div>
       <div class="new-project-only">
-        <label for="f-category">Category</label>
+        <label for="f-category">Row</label>
         <select id="f-category" name="category">
           <option value="top_of_mind">Top of Mind</option>
           <option value="near_publication">Near Publication</option>
@@ -3238,7 +3430,7 @@ function saveCardSearchQuery() {
 // ---------------------------------------------------------------------------
 
 async function api(method, path, body) {
-  const isWrite = method === 'POST' || method === 'PATCH' || method === 'DELETE';
+  const isWrite = method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE';
   if (isWrite) _writeInFlight += 1;
   try {
     const opts = { method, headers: {} };
@@ -6117,7 +6309,11 @@ function openProjectModal(projectId, defaultCategory) {
     modal.classList.remove('is-edit-project');
     document.getElementById('modal-title').textContent = 'New project';
     fName.value = '';
-    fCategory.value = defaultCategory || 'near_publication';
+    fCategory.replaceChildren(...CATEGORY_ORDER.map(key =>
+      el('option', { value: key }, [CATEGORY_LABELS[key] || key])));
+    fCategory.value = (defaultCategory && CATEGORY_ORDER.includes(defaultCategory))
+      ? defaultCategory
+      : (CATEGORY_ORDER[1] || CATEGORY_ORDER[0]);
     fPaths.value = '';
     fGitRepo.value = '';
     _setNotes([]); _setNotesEdit(null); fNoteInput.value = '';
@@ -6658,6 +6854,7 @@ async function _reloadOnce() {
       api('GET', `/api/insights?mode=${encodeURIComponent(state.insights.mode)}`)
         .catch(() => ({ insights: [], provider: 'deterministic', needs_refresh: true })),
     ]);
+    applyRowDefinitions(data.rows);
     // Separate archived projects from active ones so velocity/effort/search stay unaffected.
     const raw = data.projects || {};
     const grouped = {};
@@ -6684,6 +6881,7 @@ async function _reloadOnce() {
     setStatus('');
     render();
     renderPulsePanel();
+    maybeStartOnboarding(settingsData);
     if (!document.getElementById('activity-popover').classList.contains('hidden')) {
       renderRecentActivity();
     }
@@ -7964,6 +8162,597 @@ refreshPace();
 setInterval(refreshPace, 60 * 1000);     // local API only
 setInterval(renderPaceDock, 30 * 1000);  // time arc + countdown tick locally
 
+
+// ---------------------------------------------------------------------------
+// Editable rows ("priority tiers"): Settings → Edit Rows, and the first-run
+// welcome tour, which reuses the same editor as its middle step.
+// ---------------------------------------------------------------------------
+
+// What each default row is for. Shown in the tour and under unrenamed rows.
+const ROW_HINTS = {
+  top_of_mind:      'Ongoing areas you check every day, pinned at the very top.',
+  near_publication: 'Nearly finished. The work that most deserves your focus.',
+  in_development:   'Actively being built.',
+  early_stage:      'Ideas taking shape: early drafts and exploration.',
+  side_project:     'Things you work on for fun or on the side.',
+  future_ideas:     "Someday, maybe. Parked until there's room.",
+};
+const LOCK_ICON = 'M7 11V7a5 5 0 0 1 10 0v4;M5 11h14v10H5z';
+const MINI_CARDS_SHOWN = 8;
+
+/** Replace the board's row order and names with the server's rows. */
+function applyRowDefinitions(rows) {
+  if (!Array.isArray(rows) || !rows.length) return;
+  CATEGORY_ORDER.splice(0, CATEGORY_ORDER.length, ...rows.map(r => r.key));
+  for (const r of rows) CATEGORY_LABELS[r.key] = r.label;
+}
+
+const rowsEditor = {
+  open: false,
+  mode: 'edit',         // 'edit' | 'welcome'
+  step: 0,              // welcome: 0 intro, 1 rows, 2 tips
+  original: [],         // rows as loaded: {key, label, locked, project_count, archived_count}
+  draft: [],            // see draftRowFrom()
+  nextNew: 1,
+  saving: false,
+  error: '',
+  confirmClose: false,
+  shownThisLoad: false, // the tour opens at most once per page load
+};
+
+function draftRowFrom(r) {
+  return {
+    id: r.key, key: r.key, label: r.label, original: r.label, locked: !!r.locked,
+    projectCount: r.project_count || 0, archivedCount: r.archived_count || 0,
+    isNew: false, deleted: false, confirmingDelete: false, moveTo: null,
+  };
+}
+
+function rowsDraftChanges() {
+  const d = rowsEditor.draft;
+  const byId = Object.fromEntries(d.map(r => [r.id, r]));
+  const added = d.filter(r => r.isNew && !r.deleted);
+  const deleted = d.filter(r => !r.isNew && r.deleted);
+  const renamed = d.filter(r => !r.isNew && !r.deleted && r.label.trim() !== r.original);
+  const keptOrder = d.filter(r => !r.isNew && !r.deleted).map(r => r.key);
+  const originalOrder = rowsEditor.original.map(r => r.key).filter(k => keptOrder.includes(k));
+  const reordered = keptOrder.join('|') !== originalOrder.join('|');
+  return { added, deleted, renamed, reordered, byId,
+           any: added.length > 0 || deleted.length > 0 || renamed.length > 0 || reordered };
+}
+
+function rowDisplayName(row) {
+  return row.label.trim() || (row.isNew ? 'New row' : row.original);
+}
+
+async function openRowsEditor(mode = 'edit') {
+  let data;
+  try {
+    data = await api('GET', '/api/rows');
+  } catch (err) {
+    toast(`Couldn't load rows: ${err.message}`);
+    return;
+  }
+  Object.assign(rowsEditor, {
+    open: true, mode, step: 0, error: '', saving: false, confirmClose: false, nextNew: 1,
+    original: data.rows,
+    draft: data.rows.map(draftRowFrom),
+  });
+  const dialog = document.getElementById('rows-modal');
+  renderRowsEditor();
+  if (!dialog.open) dialog.showModal();
+  // Start on the main action, not the close button the browser would pick.
+  const primary = dialog.querySelector('.rows-foot .rows-btn.primary:not(:disabled)')
+    || dialog.querySelector('.rows-foot .rows-btn:not(:disabled)');
+  if (primary) primary.focus();
+}
+
+function closeRowsEditor() {
+  rowsEditor.open = false;
+  const dialog = document.getElementById('rows-modal');
+  if (dialog.open) dialog.close();
+}
+
+/** Close, or ask first when there are unsaved row changes. */
+function requestCloseRowsEditor() {
+  if (rowsEditor.saving) return;
+  if (rowsDraftChanges().any && !rowsEditor.confirmClose) {
+    rowsEditor.confirmClose = true;
+    renderRowsEditor();
+    return;
+  }
+  if (rowsEditor.mode === 'welcome') finishOnboarding();
+  closeRowsEditor();
+}
+
+async function finishOnboarding() {
+  try { await api('POST', '/api/onboarding/complete'); } catch {}
+}
+
+function addDraftRow(index) {
+  const row = {
+    id: `new:${rowsEditor.nextNew++}`, key: null, label: '', original: '', locked: false,
+    projectCount: 0, archivedCount: 0, isNew: true, deleted: false,
+    confirmingDelete: false, moveTo: null,
+  };
+  rowsEditor.draft.splice(Math.max(1, index), 0, row);
+  rowsEditor.confirmClose = false;
+  renderRowsEditor();
+  const input = document.querySelector(`#rows-modal [data-row-id="${row.id}"] .mini-name input`);
+  if (input) input.focus();
+}
+
+function moveDraftRow(id, delta) {
+  const d = rowsEditor.draft;
+  const i = d.findIndex(r => r.id === id);
+  const j = i + delta;
+  if (i < 1 || j < 1 || j >= d.length) return;  // row 0 (Top of Mind) never moves
+  [d[i], d[j]] = [d[j], d[i]];
+  renderRowsEditor();
+  const btn = document.querySelector(
+    `#rows-modal [data-row-id="${id}"] [data-move="${delta < 0 ? 'up' : 'down'}"]`);
+  if (btn && !btn.disabled) btn.focus();
+}
+
+/** Rows that can receive another row's projects. */
+function rowsMoveTargets(excludeId) {
+  return rowsEditor.draft.filter(r => r.id !== excludeId && !r.deleted);
+}
+
+function startDeleteDraftRow(id) {
+  const row = rowsEditor.draft.find(r => r.id === id);
+  if (!row || row.locked) return;
+  const incoming = rowsEditor.draft.filter(r => r.deleted && r.moveTo === id);
+  if (row.isNew && incoming.length === 0) {
+    rowsEditor.draft = rowsEditor.draft.filter(r => r.id !== id);
+  } else if (row.projectCount + row.archivedCount + incoming.length === 0) {
+    row.deleted = true;
+  } else {
+    // Default to the row just above (never the one being deleted).
+    const idx = rowsEditor.draft.indexOf(row);
+    const above = rowsEditor.draft.slice(0, idx).reverse().find(r => !r.deleted);
+    row.moveTo = (above || rowsMoveTargets(id)[0] || {}).id || null;
+    row.confirmingDelete = true;
+  }
+  rowsEditor.confirmClose = false;
+  renderRowsEditor();
+}
+
+function confirmDeleteDraftRow(id, targetId) {
+  const row = rowsEditor.draft.find(r => r.id === id);
+  if (!row || !targetId) return;
+  row.moveTo = targetId;
+  row.confirmingDelete = false;
+  row.deleted = true;
+  // Rows that were sending projects into this one need a new destination.
+  for (const other of rowsEditor.draft) {
+    if (other.deleted && other.moveTo === id) {
+      other.deleted = false;
+      other.confirmingDelete = true;
+      other.moveTo = targetId;
+    }
+  }
+  if (row.isNew) {
+    // A new row only "exists" to receive projects; forward them and drop it.
+    rowsEditor.draft = rowsEditor.draft.filter(r => r.id !== id);
+  }
+  renderRowsEditor();
+}
+
+function undoDeleteDraftRow(id) {
+  const row = rowsEditor.draft.find(r => r.id === id);
+  if (!row) return;
+  row.deleted = false;
+  row.confirmingDelete = false;
+  row.moveTo = null;
+  renderRowsEditor();
+}
+
+function rowsValidationError() {
+  const live = rowsEditor.draft.filter(r => !r.deleted);
+  const seen = new Set();
+  for (const r of live) {
+    const name = r.label.trim();
+    if (!name) return 'Every row needs a name.';
+    const folded = name.toLocaleLowerCase();
+    if (seen.has(folded)) return `Two rows are both named "${name}".`;
+    seen.add(folded);
+  }
+  if (rowsEditor.draft.some(r => r.confirmingDelete)) {
+    return 'Finish deleting the highlighted row, or cancel it.';
+  }
+  return '';
+}
+
+async function saveRowsDraft() {
+  const problem = rowsValidationError();
+  if (problem) {
+    rowsEditor.error = problem;
+    renderRowsEditor();
+    return false;
+  }
+  const changes = rowsDraftChanges();
+  if (!changes.any) return true;
+  const rows = rowsEditor.draft.filter(r => !r.deleted).map(r =>
+    r.isNew ? { id: r.id, label: r.label.trim() } : { key: r.key, label: r.label.trim() });
+  const deletions = changes.deleted.map(r => {
+    const target = changes.byId[r.moveTo];
+    return { key: r.key, move_to: target.isNew ? target.id : target.key };
+  });
+  rowsEditor.saving = true;
+  rowsEditor.error = '';
+  renderRowsEditor();
+  try {
+    const result = await api('PUT', '/api/rows', { rows, deletions });
+    rowsEditor.original = result.rows;
+    rowsEditor.draft = result.rows.map(draftRowFrom);
+    applyRowDefinitions(result.rows);
+    await reload();
+    return true;
+  } catch (err) {
+    rowsEditor.error = err.message;
+    return false;
+  } finally {
+    rowsEditor.saving = false;
+    renderRowsEditor();
+  }
+}
+
+// ---- rendering -------------------------------------------------------------
+
+function renderRowsEditor() {
+  const dialog = document.getElementById('rows-modal');
+  if (!dialog) return;
+  const welcome = rowsEditor.mode === 'welcome';
+  const step = welcome ? rowsEditor.step : 1;
+  const titles = welcome
+    ? ['Welcome to Agenda', 'Make the rows yours', 'A few tips before you start']
+    : ['Edit Rows'];
+  const subtitles = welcome
+    ? ['Everything you are working on, on one calm board.',
+       'Rename, add, reorder, or remove rows. You can change them anytime in Settings.',
+       "That's all you need. Agenda stays out of your way from here."]
+    : ['Rows are your priority tiers, top to bottom. Changes apply when you save.'];
+
+  const head = el('div', { class: 'rows-head' }, [
+    el('div', { class: 'rows-head-text' }, [
+      el('h2', { id: 'rows-title' }, [titles[welcome ? step : 0]]),
+      el('p', {}, [subtitles[welcome ? step : 0]]),
+    ]),
+    el('button', {
+      class: 'btn-icon', type: 'button',
+      'aria-label': welcome ? 'Skip the tour' : 'Close',
+      title: welcome ? 'Skip the tour' : 'Close',
+      onclick: requestCloseRowsEditor,
+    }, ['✕']),
+  ]);
+
+  let body;
+  if (welcome && step === 0) body = renderTourIntro();
+  else if (welcome && step === 2) body = renderTourTips();
+  else body = renderMiniBoard(welcome);
+
+  dialog.replaceChildren(head, el('div', { class: 'rows-body' }, [body]), renderRowsFooter());
+  initMiniBoardSortable();
+}
+
+function starterTrioPresent() {
+  const names = new Set((state.projects.top_of_mind || []).map(p => p.name));
+  return ['Correspondence', 'Life Stuff', 'Work Miscellany'].every(n => names.has(n));
+}
+
+function renderTourIntro() {
+  const rows = rowsEditor.draft.filter(r => !r.deleted);
+  const tiers = rows.map((r, i) => el('div', {
+    class: 'tour-tier', style: `animation-delay:${80 + i * 70}ms`,
+  }, [
+    el('span', { class: 'rank' }, [String(i + 1)]),
+    el('div', { class: 'what' }, [
+      el('strong', {}, [rowDisplayName(r)]),
+      el('span', {}, [ROW_HINTS[r.key] || 'Your own row.']),
+    ]),
+  ]));
+  return el('div', { class: 'tour-hero' }, [
+    el('div', {}, [
+      el('h3', {}, ['One board for everything you’re juggling.']),
+      el('p', {}, ['Each card on the board is a project, and each project holds its own todos. ' +
+        'You can see at a glance what deserves your attention today.']),
+      el('p', {}, ['The board is organized into ', el('strong', {}, ['rows']),
+        ', which work as priority tiers. The higher a row, the more attention its projects deserve. ' +
+        'As a project matures, you move it between rows.']),
+      starterTrioPresent()
+        ? el('p', {}, ['Your board starts with three ongoing projects in ',
+            el('strong', {}, [rowDisplayName(rows[0])]),
+            ': Correspondence, Life Stuff, and Work Miscellany. ' +
+            'Next, you can shape the rows to fit how you work.'])
+        : el('p', {}, ['Next, you can shape the rows to fit how you work.']),
+    ]),
+    el('div', { class: 'tour-tiers', 'aria-label': 'Your rows, highest priority first' }, [
+      el('div', { class: 'tour-arrow' }, ['▲ More attention']),
+      ...tiers,
+      el('div', { class: 'tour-arrow' }, ['▼ Less urgent']),
+    ]),
+  ]);
+}
+
+function renderTourTips() {
+  const tip = (title, text) => el('div', { class: 'tour-tip' }, [
+    el('strong', {}, [title]), el('span', {}, [text]),
+  ]);
+  return el('div', { class: 'tour-tips' }, [
+    tip('Add a project', 'Click “New project” at the end of any row.'),
+    tip('Fill it with todos', 'Type into “Add todo…” on any card. Mark one as the blocker and it stays pinned to the top of the card.'),
+    tip('Move it as it matures', 'Drag a card by its grip into another row. Its todos come along.'),
+    tip('Let rows sort themselves', 'Below the top row, projects with the nearest deadlines come first, then the ones you have made the most recent progress on.'),
+    tip('Track your progress', 'Completing todos fills the daily dots at the top. Give todos effort points to weigh bigger tasks more.'),
+    tip('Change rows anytime', 'Open Settings (the gear icon) and choose Edit Rows. You can also replay this tour from there.'),
+  ]);
+}
+
+function renderMiniBoard(welcome) {
+  const d = rowsEditor.draft;
+  const changes = rowsDraftChanges();
+  const intro = welcome
+    ? el('p', { class: 'tour-intro' }, [
+        'These are your starting rows, highest priority at the top. Click a name to rename it, ' +
+        'use the “+” between rows to add one, drag the handle to reorder, or remove rows you won’t use. ' +
+        'Top of Mind always stays first.'])
+    : null;
+
+  const board = el('div', { class: 'mini-board', id: 'mini-board' });
+  d.forEach((row, index) => {
+    if (index > 0) board.appendChild(renderMiniGap(index));
+    board.appendChild(renderMiniRow(row, index));
+  });
+
+  const summary = renderRowsSummary(changes);
+  return el('div', {}, [
+    intro,
+    board,
+    el('div', { class: 'rows-add-end' }, [
+      el('button', { class: 'rows-btn small', type: 'button', onclick: () => addDraftRow(d.length) },
+        ['+ Add a row at the bottom']),
+    ]),
+    summary,
+    rowsEditor.error ? el('p', { class: 'rows-error', role: 'alert' }, [rowsEditor.error]) : null,
+  ]);
+}
+
+function renderMiniGap(index) {
+  return el('div', { class: 'mini-gap' }, [
+    el('button', { type: 'button', onclick: () => addDraftRow(index),
+      'aria-label': 'Add a row here' }, ['+ Add row']),
+  ]);
+}
+
+function renderMiniRow(row, index) {
+  const d = rowsEditor.draft;
+  const live = d.filter(r => !r.deleted);
+  const liveIndex = live.indexOf(row);
+  const projects = row.isNew ? [] : (state.projects[row.key] || []).filter(p => !p.archived);
+  const incoming = d.filter(r => r.deleted && r.moveTo === row.id);
+  const incomingNames = incoming.flatMap(r =>
+    (state.projects[r.key] || []).filter(p => !p.archived).map(p => p.name));
+
+  const grip = row.locked
+    ? el('span', { class: 'mini-grip locked', title: 'Top of Mind always stays first' },
+        [svgIcon(LOCK_ICON)])
+    : el('span', { class: 'mini-grip', title: 'Drag to reorder', 'aria-hidden': 'true' },
+        [svgIcon(ICONS.grip, { filled: true })]);
+
+  const input = el('input', {
+    type: 'text', value: row.label, maxlength: '60', placeholder: 'Row name',
+    'aria-label': row.isNew ? 'New row name' : `Name for ${row.original}`,
+    disabled: row.deleted || rowsEditor.saving,
+    oninput: e => {
+      row.label = e.target.value;
+      rowsEditor.error = '';
+      rowsEditor.confirmClose = false;
+      const summary = document.getElementById('rows-summary');
+      if (summary) summary.replaceWith(renderRowsSummary(rowsDraftChanges()));
+      updateRowsFooterState();
+    },
+    onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
+  });
+
+  const count = row.projectCount;
+  let sub;
+  if (rowsEditor.mode === 'welcome' && ROW_HINTS[row.key] && row.label.trim() === row.original) {
+    sub = ROW_HINTS[row.key];
+  } else if (row.isNew) {
+    sub = incoming.length ? 'New row, receiving projects' : 'New row';
+  } else {
+    sub = `${count} project${count === 1 ? '' : 's'}` +
+      (row.archivedCount ? ` · ${row.archivedCount} archived` : '');
+  }
+
+  const cards = projects.slice(0, MINI_CARDS_SHOWN).map(p =>
+    el('div', { class: 'mini-card', title: p.name }, [p.name]));
+  const incomingCards = incomingNames.slice(0, Math.max(0, MINI_CARDS_SHOWN - cards.length)).map(n =>
+    el('div', { class: 'mini-card incoming', title: `${n} (moving here)` }, [n]));
+  const hidden = projects.length + incomingNames.length - cards.length - incomingCards.length;
+  const track = el('div', { class: 'mini-track', 'aria-hidden': 'true' },
+    cards.length + incomingCards.length
+      ? [...cards, ...incomingCards, hidden > 0 ? el('span', { class: 'mini-more' }, [`+${hidden} more`]) : null]
+      : [el('div', { class: 'mini-empty' }, [row.deleted ? 'Will be removed' : 'No projects yet'])]);
+
+  const actions = row.locked
+    ? el('div', { class: 'mini-actions' }, [el('span', { class: 'mini-lock' }, ['Always first'])])
+    : el('div', { class: 'mini-actions' }, row.deleted ? [] : [
+        el('button', { class: 'mini-icon', type: 'button', 'data-move': 'up', title: 'Move up',
+          'aria-label': `Move ${rowDisplayName(row)} up`, disabled: liveIndex <= 1,
+          onclick: () => moveDraftRow(row.id, -1) }, [svgIcon(ICONS.arrowUp)]),
+        el('button', { class: 'mini-icon', type: 'button', 'data-move': 'down', title: 'Move down',
+          'aria-label': `Move ${rowDisplayName(row)} down`, disabled: index >= d.length - 1,
+          onclick: () => moveDraftRow(row.id, 1) }, [svgIcon(ICONS.arrowDown)]),
+        el('button', { class: 'mini-icon danger', type: 'button', title: 'Delete row',
+          'aria-label': `Delete ${rowDisplayName(row)}`,
+          onclick: () => startDeleteDraftRow(row.id) }, [svgIcon(ICONS.trash)]),
+      ]);
+
+  const classes = ['mini-row'];
+  if (row.locked) classes.push('locked-row');
+  if (row.isNew) classes.push('is-new');
+  if (row.deleted) classes.push('is-deleted');
+  const children = [
+    grip,
+    el('div', { class: 'mini-name' }, [input, el('span', { class: 'mini-sub' }, [sub])]),
+    track,
+    actions,
+  ];
+
+  if (row.confirmingDelete) {
+    const targets = rowsMoveTargets(row.id);
+    const select = el('select', { 'aria-label': 'Move projects to' },
+      targets.map(t => el('option', { value: t.id, selected: t.id === row.moveTo }, [rowDisplayName(t)])));
+    const total = row.projectCount + row.archivedCount +
+      incoming.reduce((n, r) => n + r.projectCount + r.archivedCount, 0);
+    children.push(el('div', { class: 'mini-delete', role: 'group',
+      'aria-label': `Delete ${rowDisplayName(row)}` }, [
+      el('span', {}, [`Delete “${rowDisplayName(row)}”? Its ${total} project${total === 1 ? '' : 's'}` +
+        (row.archivedCount ? ' (including archived ones)' : '') + ' will move to']),
+      select,
+      el('button', { class: 'rows-btn small danger', type: 'button',
+        onclick: () => confirmDeleteDraftRow(row.id, select.value) }, ['Delete row']),
+      el('button', { class: 'rows-btn small ghost', type: 'button',
+        onclick: () => undoDeleteDraftRow(row.id) }, ['Cancel']),
+    ]));
+  } else if (row.deleted) {
+    const target = rowsEditor.draft.find(r => r.id === row.moveTo);
+    children.push(el('div', { class: 'mini-deleted-note' }, [
+      target ? `Will be deleted when you save. Its projects move to “${rowDisplayName(target)}”. `
+             : 'Will be deleted when you save. ',
+      el('button', { class: 'rows-btn small ghost', type: 'button',
+        onclick: () => undoDeleteDraftRow(row.id) }, ['Undo']),
+    ]));
+  }
+  return el('div', { class: classes.join(' '), dataset: { rowId: row.id } }, children);
+}
+
+function renderRowsSummary(changes) {
+  const parts = [];
+  for (const r of changes.renamed) parts.push(el('div', {}, ['Rename ', el('strong', {}, [r.original]),
+    ' to ', el('strong', {}, [r.label.trim() || '…'])]));
+  for (const r of changes.added) parts.push(el('div', {}, ['Add ', el('strong', {}, [rowDisplayName(r)])]));
+  for (const r of changes.deleted) {
+    const t = changes.byId[r.moveTo];
+    parts.push(el('div', {}, ['Delete ', el('strong', {}, [r.original]),
+      t && (r.projectCount + r.archivedCount) ? ` and move its projects to ` : '',
+      t && (r.projectCount + r.archivedCount) ? el('strong', {}, [rowDisplayName(t)]) : '']));
+  }
+  if (changes.reordered) parts.push(el('div', {}, ['Reorder rows']));
+  return el('div', { class: 'rows-summary', id: 'rows-summary', 'aria-live': 'polite' },
+    parts.length ? [el('div', {}, [el('strong', {}, ['Changes'])]), ...parts] : []);
+}
+
+function renderRowsFooter() {
+  const welcome = rowsEditor.mode === 'welcome';
+  const foot = el('div', { class: 'rows-foot', id: 'rows-foot' });
+  if (rowsEditor.confirmClose) {
+    foot.append(
+      el('span', {}, ['You have unsaved row changes.']),
+      el('span', { class: 'spacer' }),
+      el('button', { class: 'rows-btn', type: 'button', onclick: () => {
+        rowsEditor.draft = rowsEditor.original.map(draftRowFrom);
+        requestCloseRowsEditor();
+      } }, ['Discard']),
+      el('button', { class: 'rows-btn primary', type: 'button', onclick: async () => {
+        rowsEditor.confirmClose = false;
+        if (await saveRowsDraft()) {
+          if (welcome) finishOnboarding();
+          closeRowsEditor();
+        }
+      } }, ['Save changes']),
+    );
+    return foot;
+  }
+  if (welcome) {
+    const step = rowsEditor.step;
+    const dots = el('div', { class: 'tour-steps', 'aria-label': `Step ${step + 1} of 3` },
+      [0, 1, 2].map(i => el('span', { class: `tour-dot${i === step ? ' active' : ''}` })));
+    foot.append(dots, el('span', { class: 'spacer' }));
+    if (step > 0) {
+      foot.append(el('button', { class: 'rows-btn ghost', type: 'button',
+        disabled: rowsEditor.saving, onclick: () => { rowsEditor.step -= 1; renderRowsEditor(); } }, ['Back']));
+    }
+    if (step === 0) {
+      foot.append(el('button', { class: 'rows-btn primary', type: 'button',
+        onclick: () => { rowsEditor.step = 1; renderRowsEditor(); } }, ['Get started']));
+    } else if (step === 1) {
+      foot.append(el('button', { class: 'rows-btn primary', type: 'button', id: 'rows-primary',
+        disabled: rowsEditor.saving, onclick: async () => {
+          if (await saveRowsDraft()) { rowsEditor.step = 2; renderRowsEditor(); }
+        } }, [rowsEditor.saving ? 'Saving…' : 'Next']));
+    } else {
+      foot.append(el('button', { class: 'rows-btn primary', type: 'button', onclick: () => {
+        finishOnboarding();
+        closeRowsEditor();
+      } }, ['Start using Agenda']));
+    }
+    return foot;
+  }
+  const changes = rowsDraftChanges();
+  foot.append(
+    el('span', { class: 'spacer' }),
+    el('button', { class: 'rows-btn', type: 'button', disabled: rowsEditor.saving,
+      onclick: requestCloseRowsEditor }, ['Cancel']),
+    el('button', { class: 'rows-btn primary', type: 'button', id: 'rows-primary',
+      disabled: rowsEditor.saving || !changes.any,
+      onclick: async () => {
+        if (await saveRowsDraft()) {
+          closeRowsEditor();
+          toast('Rows updated');
+        }
+      } }, [rowsEditor.saving ? 'Saving…' : 'Save changes']),
+  );
+  return foot;
+}
+
+/** Keep the Save button in step with typing without re-rendering the inputs. */
+function updateRowsFooterState() {
+  if (rowsEditor.mode !== 'edit') return;
+  const btn = document.getElementById('rows-primary');
+  if (btn) btn.disabled = rowsEditor.saving || !rowsDraftChanges().any;
+}
+
+function initMiniBoardSortable() {
+  const board = document.getElementById('mini-board');
+  if (!board || typeof Sortable === 'undefined') return;
+  Sortable.create(board, {
+    animation: 150,
+    handle: '.mini-grip:not(.locked)',
+    draggable: '.mini-row:not(.locked-row):not(.is-deleted)',
+    ghostClass: 'sortable-ghost',
+    onMove: evt => !(evt.related.classList.contains('locked-row') && !evt.willInsertAfter),
+    onEnd: () => {
+      const order = [...board.querySelectorAll('.mini-row')].map(n => n.dataset.rowId);
+      const byId = Object.fromEntries(rowsEditor.draft.map(r => [r.id, r]));
+      rowsEditor.draft = order.map(id => byId[id]).filter(Boolean);
+      renderRowsEditor();
+    },
+  });
+}
+
+document.getElementById('rows-modal').addEventListener('cancel', e => {
+  e.preventDefault();          // Escape asks before discarding changes
+  requestCloseRowsEditor();
+});
+document.getElementById('setting-edit-rows').addEventListener('click', () => {
+  document.getElementById('settings-close').click();
+  openRowsEditor('edit');
+});
+document.getElementById('setting-replay-tour').addEventListener('click', () => {
+  document.getElementById('settings-close').click();
+  openRowsEditor('welcome');
+});
+
+/** Called after each board load; opens the tour on a brand-new board. */
+function maybeStartOnboarding(settings) {
+  if (!settings || !settings.onboarding_pending) return;
+  if (rowsEditor.open || rowsEditor.shownThisLoad) return;
+  rowsEditor.shownThisLoad = true;
+  openRowsEditor('welcome');
+}
 </script>
 </body>
 </html>
