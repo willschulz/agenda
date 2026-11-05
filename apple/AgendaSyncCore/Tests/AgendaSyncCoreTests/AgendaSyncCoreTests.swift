@@ -297,6 +297,28 @@ final class AgendaSyncCoreTests: XCTestCase {
         )
     }
 
+    func testBoardOrderCarriesRowDefinitionsAndDecodesOlderPayloads() throws {
+        let snapshot = AgendaBoardOrderSnapshot(
+            generatedAt: "2026-11-05T21:00:00+00:00",
+            rows: ["top_of_mind": ["project-a"], "ongoing": ["project-b"]],
+            rowDefinitions: [
+                AgendaRowDefinition(key: "top_of_mind", label: "Now"),
+                AgendaRowDefinition(key: "ongoing", label: "Ongoing"),
+            ]
+        )
+        let record = try AgendaCloudRecord.boardOrder(snapshot)
+        XCTAssertEqual(try AgendaCloudRecord.decodeBoardOrder(record), snapshot)
+
+        // A payload from before editable rows has no row_definitions.
+        let legacy = Data(#"""
+        {"schema_version": 2, "generated_at": "2026-08-14T03:30:00+00:00",
+         "rows": {"top_of_mind": ["project-a"]}}
+        """#.utf8)
+        let decoded = try JSONDecoder().decode(AgendaBoardOrderSnapshot.self, from: legacy)
+        XCTAssertNil(decoded.rowDefinitions)
+        XCTAssertEqual(decoded.rows["top_of_mind"], ["project-a"])
+    }
+
     func testManifestTracksLatestLiveOrDeletedState() throws {
         let oldManifest = try JSONDecoder().decode(
             AgendaCanonicalManifestEntry.self,

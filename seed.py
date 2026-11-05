@@ -1,11 +1,12 @@
-"""Create a small example board for a new Agenda installation.
+"""Create the starter board for a new Agenda installation.
 
-Run after first deploy:
+Run on first launch (the native app does this automatically):
     python3 seed.py
 
 Idempotent: if the projects table is non-empty, this script does nothing.
-The examples demonstrate Agenda's main project stages without assuming a
-particular profession or workflow.
+A new board starts with the default rows and three always-useful projects in
+Top of Mind; everything else is the user's to add. Seeding also turns on the
+first-run welcome tour, which explains the rows and lets the user edit them.
 """
 
 from __future__ import annotations
@@ -28,81 +29,31 @@ def _now() -> str:
 # - for_later items become for_later=1 todos in listed order
 PROJECTS: list[dict] = [
     {
-        "name": "Neighborhood oral history",
-        "category": "near_publication",
+        "name": "Correspondence",
+        "category": "top_of_mind",
         "deadline": None,
-        "blocker": "Receive final interview release",
-        "todos": [
-            "Proofread the story collection",
-            "Confirm photo captions",
-            "Prepare the launch announcement",
-        ],
-        "for_later": [
-            "Donate recordings to the local archive",
-        ],
-        "northstars": [
-            "Preserve participants' voices accurately and respectfully.",
-            "Publish a collection that is accessible to the whole neighborhood.",
-        ],
-    },
-    {
-        "name": "Community garden season",
-        "category": "in_development",
-        "deadline": None,
-        "blocker": "Choose a date for the spring workday",
-        "todos": [
-            {
-                "text": "Draft the planting plan",
-                "note": "Start with the seed inventory, then leave open beds for member requests.",
-            },
-            "Ask members about tool needs",
-            "Update the watering rota",
-        ],
-        "for_later": [
-            "Plan a midsummer potluck",
-        ],
-        "northstars": [],
-    },
-    {
-        "name": "Household energy dashboard",
-        "category": "early_stage",
-        "deadline": None,
-        "blocker": "Pick a data source",
-        "todos": [
-            "Compare smart-meter export formats",
-            "Sketch the first weekly report",
-            "Test a local-only prototype",
-        ],
+        "blocker": None,
+        "todos": [],
         "for_later": [],
-        "northstars": [],
+        "northstars": ["Emails and messages that need a reply."],
     },
     {
-        "name": "Learn conversational Italian",
-        "category": "side_project",
+        "name": "Life Stuff",
+        "category": "top_of_mind",
         "deadline": None,
         "blocker": None,
-        "todos": [
-            "Choose a weekly practice group",
-            "Review vocabulary for ten minutes",
-        ],
-        "for_later": [
-            "Plan a language-immersion weekend",
-        ],
-        "northstars": [],
+        "todos": [],
+        "for_later": [],
+        "northstars": ["Errands, appointments, and everything outside work."],
     },
     {
-        "name": "Someday ideas",
-        "category": "future_ideas",
+        "name": "Work Miscellany",
+        "category": "top_of_mind",
         "deadline": None,
         "blocker": None,
-        "todos": [
-            "Build a tiny lending library",
-            "Take a wilderness first-aid course",
-        ],
-        "for_later": [
-            "Review this list next season",
-        ],
-        "northstars": [],
+        "todos": [],
+        "for_later": [],
+        "northstars": ["Small work tasks that don't belong to a bigger project."],
     },
 ]
 
@@ -180,6 +131,8 @@ def seed() -> None:
                     (pid, text, for_later_order, now, now),
                 )
                 for_later_order += 1
+
+    db.set_onboarding_pending(True)
 
     n_proj = conn.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"]
     n_todo = conn.execute("SELECT COUNT(*) AS n FROM todos").fetchone()["n"]

@@ -206,6 +206,13 @@ todos (
 day_overrides (
   date TEXT PRIMARY KEY            -- ISO YYYY-MM-DD; presence = flipped from natural workday state
 )
+
+board_rows (                       -- the user's rows ("priority tiers")
+  key PRIMARY KEY,                 -- stable id stored in projects.category
+  label,                           -- display name; renaming changes only this
+  position,                        -- top to bottom; top_of_mind is always 0
+  created_at, updated_at
+)
 ```
 
 The full schema and migrations live in `db.py` (`SCHEMA_SQL` plus the
@@ -240,6 +247,10 @@ stay on the Mac and are never synced.
 | `GET` | `/api/stats` | Completed effort and per-day accomplishment details |
 | `GET` | `/api/day-overrides` | List overridden dates |
 | `POST` | `/api/day-overrides/toggle` | Flip a date's workday/holiday status |
+| `GET` | `/api/rows` | The board's rows (priority tiers) with project counts |
+| `PUT` | `/api/rows` | Apply a row-editor session: rename, add, reorder, delete + move projects |
+| `POST` | `/api/onboarding/complete` | Dismiss the first-run welcome tour |
+| `POST` | `/api/onboarding/restart` | Show the welcome tour again |
 | `GET`/`PATCH` | `/api/usage/config` | Opt-in AI usage ledger settings |
 | `POST` | `/api/usage/scan` | Scan this Mac's Claude Code logs now |
 | `POST` | `/api/usage/events` | Ingest usage in the open event format |

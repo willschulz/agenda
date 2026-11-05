@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -25,6 +26,16 @@ CATEGORY_RANK = {
     "side_project": 4,
     "future_ideas": 5,
 }
+
+
+def _row_rank(project: dict) -> int:
+    if "row_rank" in project:
+        return int(project["row_rank"])
+    return CATEGORY_RANK.get(project["category"], 6)
+
+
+def _row_label(project: dict) -> str:
+    return project.get("row_label") or project["category"].replace("_", " ")
 
 
 def _utc_now() -> datetime:
@@ -81,6 +92,18 @@ def _load_rows(conn) -> tuple[list[dict], list[dict]]:
                FROM projects WHERE archived = 0"""
         ).fetchall()
     ]
+    # Rank and name by the user's own rows (board_rows), top row = 0.
+    try:
+        board = conn.execute(
+            "SELECT key, label FROM board_rows ORDER BY position, key").fetchall()
+    except sqlite3.OperationalError:
+        board = []
+    rank = {row["key"]: i for i, row in enumerate(board)}
+    label = {row["key"]: row["label"] for row in board}
+    for project in projects:
+        if project["category"] in rank:
+            project["row_rank"] = rank[project["category"]]
+            project["row_label"] = label[project["category"]]
     todos = [
         dict(row)
         for row in conn.execute(
@@ -102,11 +125,11 @@ def _plan_candidates(projects: list[dict], todos: list[dict], now: datetime) -> 
         project = project_by_id.get(todo["project_id"])
         if not project:
             continue
-        rank = CATEGORY_RANK.get(project["category"], 6)
+        rank = _row_rank(project)
         score = 60 - rank * 8
         kind = "priority"
         urgency = "medium" if rank <= 1 else "low"
-        reason = f"{project['name']} is in {project['category'].replace('_', ' ')}."
+        reason = f"{project['name']} is in {_row_label(project)}."
         action = "open"
 
         deadline = None
@@ -205,7 +228,7 @@ def _stale_candidates(projects: list[dict], todos: list[dict], now: datetime) ->
                     )
                 )
 
-        rank = CATEGORY_RANK.get(project["category"], 6)
+        rank = _row_rank(project)
         latest_done = latest_done_by_project.get(project_id)
         days = (now - latest_done).days if latest_done else None
         if rank <= 2 and (days is None or days >= 14):

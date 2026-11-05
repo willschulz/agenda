@@ -1019,7 +1019,9 @@ final class CloudKitCoordinator: ObservableObject {
             )[AgendaCloudRecord.boardOrderID]?.get()
             if let existing,
                let current = try? AgendaCloudRecord.decodeBoardOrder(existing) {
-                guard current.rows != snapshot.rows else { return }
+                guard current.rows != snapshot.rows
+                    || current.rowDefinitions != snapshot.rowDefinitions
+                else { return }
                 guard current.generatedAt < snapshot.generatedAt else { return }
             }
             let record = try AgendaCloudRecord.boardOrder(
@@ -1036,7 +1038,9 @@ final class CloudKitCoordinator: ObservableObject {
                     ] as? CKRecord
                 else { throw error }
                 if let current = try? AgendaCloudRecord.decodeBoardOrder(server) {
-                    guard current.rows != snapshot.rows else { return }
+                    guard current.rows != snapshot.rows
+                        || current.rowDefinitions != snapshot.rowDefinitions
+                    else { return }
                     guard current.generatedAt < snapshot.generatedAt else { return }
                 }
                 _ = try await database.save(
