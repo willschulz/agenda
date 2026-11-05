@@ -12,8 +12,14 @@ set -euo pipefail
 ROOT="$(cd "${1:-$(dirname "$0")/..}" && pwd)"
 cd "$ROOT"
 
+# The local file is gitignored, so a linked worktree doesn't have its own
+# copy. Fall back to the main checkout's (the parent of the common git dir).
+local_patterns=".privacy-patterns.local"
+if [[ ! -f "$local_patterns" ]] && common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+    local_patterns="$(dirname "$common")/.privacy-patterns.local"
+fi
 pattern_files=("scripts/privacy-patterns.txt")
-[[ -f .privacy-patterns.local ]] && pattern_files+=(".privacy-patterns.local")
+[[ -f "$local_patterns" ]] && pattern_files+=("$local_patterns")
 
 patterns="$(mktemp)"
 trap 'rm -f "$patterns"' EXIT
@@ -34,7 +40,7 @@ filtered=()
 for f in "${files[@]}"; do
     f="${f#./}"
     case "$f" in
-        scripts/privacy-patterns.txt|.privacy-patterns.local) continue ;;
+        scripts/privacy-patterns.txt|.privacy-patterns.local|*/.privacy-patterns.local) continue ;;
     esac
     [[ -f "$f" ]] && filtered+=("$f")
 done
