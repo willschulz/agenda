@@ -366,17 +366,22 @@ public struct AgendaBoardOrderSnapshot: Codable, Hashable, Sendable {
     /// rows became editable don't carry it, and clients then fall back to the
     /// default rows.
     public let rowDefinitions: [AgendaRowDefinition]?
+    /// Whether the Mac uses effort points. Optional: older snapshots omit it,
+    /// and clients then treat points as on. Stored efforts are never dropped.
+    public let pointsEnabled: Bool?
 
     public init(
         schemaVersion: Int = agendaContractSchemaVersion,
         generatedAt: String,
         rows: [String: [String]],
-        rowDefinitions: [AgendaRowDefinition]? = nil
+        rowDefinitions: [AgendaRowDefinition]? = nil,
+        pointsEnabled: Bool? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
         self.rows = rows
         self.rowDefinitions = rowDefinitions
+        self.pointsEnabled = pointsEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -384,6 +389,7 @@ public struct AgendaBoardOrderSnapshot: Codable, Hashable, Sendable {
         case generatedAt = "generated_at"
         case rows
         case rowDefinitions = "row_definitions"
+        case pointsEnabled = "points_enabled"
     }
 }
 

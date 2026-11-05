@@ -31,6 +31,18 @@ enum AgendaDensity: String, CaseIterable, Identifiable {
     var overviewMinimumWidth: CGFloat { self == .comfortable ? 168 : 145 }
 }
 
+private struct AgendaPointsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// Whether effort points are shown (the Mac's Settings → Effort points).
+    var agendaPointsEnabled: Bool {
+        get { self[AgendaPointsEnabledKey.self] }
+        set { self[AgendaPointsEnabledKey.self] = newValue }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var sync: MobileSyncController
     @AppStorage("agenda.mobile.displayMode") private var displayModeRaw =
@@ -115,6 +127,7 @@ struct ContentView: View {
             }
         }
         .tint(AgendaPalette.accent)
+        .environment(\.agendaPointsEnabled, sync.store.pointsEnabled)
     }
 }
 
@@ -941,6 +954,7 @@ struct AgendaStructuralTodoSection<RowContent: View>: View {
 }
 
 struct AgendaTodoRow: View {
+    @Environment(\.agendaPointsEnabled) private var pointsEnabled
     let placement: AgendaTodoPlacement
     let compact: Bool
     var pending = false
@@ -995,7 +1009,7 @@ struct AgendaTodoRow: View {
                     .accessibilityLabel("Edit todo")
             }
 
-            if let effort = placement.todo.effort {
+            if pointsEnabled, let effort = placement.todo.effort {
                 Text("\(effort)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(AgendaPalette.faint)
@@ -1036,6 +1050,7 @@ struct AgendaTodoDeleteDraft: Identifiable {
 }
 
 struct AgendaTodoEditSheet: View {
+    @Environment(\.agendaPointsEnabled) private var pointsEnabled
     @Environment(\.dismiss) private var dismiss
     @State private var values: AgendaTodoEditValues
     @State private var textBuffer: AgendaTodoTextBuffer
@@ -1096,10 +1111,12 @@ struct AgendaTodoEditSheet: View {
                     )
                 }
                 Section("Planning") {
-                    Picker("Effort", selection: $values.effort) {
-                        Text("None").tag(Int?.none)
-                        ForEach([1, 2, 3, 5, 8, 13], id: \.self) { effort in
-                            Text("\(effort)").tag(Optional(effort))
+                    if pointsEnabled {
+                        Picker("Effort", selection: $values.effort) {
+                            Text("None").tag(Int?.none)
+                            ForEach([1, 2, 3, 5, 8, 13], id: \.self) { effort in
+                                Text("\(effort)").tag(Optional(effort))
+                            }
                         }
                     }
                     Toggle("Deadline", isOn: hasDeadline)
@@ -1288,6 +1305,7 @@ struct AgendaConflictSheet: View {
 }
 
 struct AgendaProjectMetrics: View {
+    @Environment(\.agendaPointsEnabled) private var pointsEnabled
     let card: AgendaProjectCardModel
     var condensed = false
 
@@ -1316,7 +1334,7 @@ struct AgendaProjectMetrics: View {
                 Label("\(card.reviewCount)", systemImage: "star.fill")
                     .foregroundStyle(AgendaPalette.review)
             }
-            if card.effort > 0 && !condensed {
+            if pointsEnabled && card.effort > 0 && !condensed {
                 Spacer(minLength: 2)
                 Label("\(card.effort)", systemImage: "gauge.with.dots.needle.33percent")
             }
@@ -1337,7 +1355,7 @@ struct AgendaProjectMetrics: View {
         if card.reviewCount > 0 {
             parts.append("\(card.reviewCount) review")
         }
-        if card.effort > 0 && !condensed {
+        if pointsEnabled && card.effort > 0 && !condensed {
             parts.append("\(card.effort) effort")
         }
         return parts.joined(separator: " · ")

@@ -2925,15 +2925,24 @@
             aria-label="Close settings">&#x2715;</button>
   </div>
   <div class="settings-group">
-    <label for="setting-daily-goal">Daily effort goal</label>
+    <label for="setting-points-enabled">Effort points</label>
+    <label class="search-toggle-label" style="text-transform:none;font-weight:400">
+      <input type="checkbox" id="setting-points-enabled" /> Give todos effort points
+    </label>
+    <p class="settings-hint">Weigh bigger tasks more with points (1, 2, 3, 5, 8, 13).
+      When off, every task counts as 1 and point badges are hidden. Points you
+      have already set are kept and come back if you turn this on again.</p>
+  </div>
+  <div class="settings-group" style="margin-top:20px">
+    <label for="setting-daily-goal" data-points-label="Daily effort goal (pts)" data-tasks-label="Daily goal (tasks)">Daily effort goal</label>
     <input type="number" id="setting-daily-goal" min="1" max="50" step="1" />
     <p class="settings-hint">Dots saturate at this value; the ring around
       today fills as you approach it.</p>
   </div>
   <div class="settings-group" style="margin-top:20px">
-    <label for="setting-vel-goal">Velocity goal (pts/day)</label>
+    <label for="setting-vel-goal" data-points-label="Velocity goal (pts/day)" data-tasks-label="Velocity goal (tasks/day)">Velocity goal (pts/day)</label>
     <input type="number" id="setting-vel-goal" min="0.1" max="20" step="0.1" />
-    <p class="settings-hint">Effort points/day that earns a fully green pill.
+    <p class="settings-hint" data-points-label="Effort points/day that earns a fully green pill. Color scales continuously from tan (near zero) to green (at goal)." data-tasks-label="Completed tasks/day that earns a fully green pill. Color scales continuously from tan (near zero) to green (at goal).">Effort points/day that earns a fully green pill.
       Color scales continuously from tan (near zero) to green (at goal).</p>
   </div>
   <div class="settings-group" style="margin-top:20px">
@@ -2942,9 +2951,9 @@
     <p class="settings-hint">Completed todos disappear from the list after this many hours. Default is 24.</p>
   </div>
   <div class="settings-group" style="margin-top:20px">
-    <label for="setting-ip-limit">In-progress effort limit (pts)</label>
+    <label for="setting-ip-limit" data-points-label="In-progress effort limit (pts)" data-tasks-label="In-progress limit (tasks)">In-progress effort limit (pts)</label>
     <input type="number" id="setting-ip-limit" min="1" max="200" step="1" />
-    <p class="settings-hint">Total effort points allowed in-progress at once. Unpointed todos don't count. Default is 13.</p>
+    <p class="settings-hint" data-points-label="Total effort points allowed in-progress at once. Unpointed todos don't count. Default is 13." data-tasks-label="How many tasks can be in progress at once. Tasks with sub-items don't count; their sub-items do.">Total effort points allowed in-progress at once. Unpointed todos don't count. Default is 13.</p>
   </div>
   <div class="settings-group" style="margin-top:20px">
     <label for="setting-usage-enabled">AI usage tracking</label>
@@ -3144,6 +3153,7 @@ function saveSettings(s) {
     vel_goal: s.vel_goal,
     retire_hours: s.retire_hours,
     ip_effort_limit: s.ip_effort_limit,
+    points_enabled: s.points_enabled !== false,
   };
   _serverSettings = { ..._serverSettings, ...patch };
   fetch('/api/settings', {
@@ -3153,6 +3163,37 @@ function saveSettings(s) {
   }).catch(e => console.warn('settings sync failed:', e));
 }
 function getDailyGoal() { return loadSettings().daily_goal; }
+
+/** Effort points are in use (on for boards from before the setting existed). */
+function pointsOn() { return loadSettings().points_enabled !== false; }
+
+/** "pts" or "tasks", for labels that show a weighted count. */
+function pointUnit() { return pointsOn() ? 'pts' : 'tasks'; }
+
+/** Show the settings labels that match whether points are on. */
+function applyPointsLabels() {
+  const key = pointsOn() ? 'pointsLabel' : 'tasksLabel';
+  document.querySelectorAll('[data-points-label]').forEach(node => {
+    node.textContent = node.dataset[key];
+  });
+  const toggle = document.getElementById('setting-points-enabled');
+  if (toggle) toggle.checked = pointsOn();
+}
+
+/** Whether a todo has sub-items (super-items don't count toward in-progress load). */
+function todoHasChildren(todoId) {
+  for (const projs of Object.values(state.projects))
+    for (const p of projs)
+      for (const t of (p.todos || []))
+        if (t.parent_id === todoId) return true;
+  return false;
+}
+
+/** What marking a todo in progress adds to the in-progress load. */
+function inProgressWeight(t) {
+  if (pointsOn()) return t.effort || 0;
+  return todoHasChildren(t.id) ? 0 : 1;
+}
 
 function getRetireMs() { return loadSettings().retire_hours * 60 * 60 * 1000; }
 
@@ -3172,7 +3213,8 @@ function getInProgressEffort() {
     for (const p of projs) {
       for (const t of (p.todos || [])) {
         if (parentIds.has(t.id)) continue; // skip super-items
-        if (t.in_progress && !t.completed && t.effort) total += t.effort;
+        if (!t.in_progress || t.completed) continue;
+        total += pointsOn() ? (t.effort || 0) : 1;
       }
     }
   }
@@ -3185,7 +3227,8 @@ function updateIpEffortMeter() {
   if (!el2) return;
   const limit = loadSettings().ip_effort_limit;
   const current = getInProgressEffort();
-  el2.textContent = `${current}/${limit} pts`;
+  el2.textContent = `${current}/${limit} ${pointUnit()}`;
+  el2.title = pointsOn() ? 'In-progress effort points / limit' : 'Tasks in progress / limit';
   el2.classList.toggle('at-limit', current >= limit);
 }
 
@@ -3216,8 +3259,7 @@ function refreshAncestorRings(todo, card) {
       if (btn) {
         const count = node.children ? node.children.length : 0;
         const tip = a.total
-          ? `${count} sub-items · ${a.done}/${a.total} pts done`
-            + (a.inProgress ? ` · ${a.inProgress} pts in progress` : '')
+          ? subItemProgressText(count, a)
           : `${count} sub-items`;
         const prefix = btn.classList.contains('open') ? 'Collapse' : 'Expand';
         btn.title = prefix + ' · ' + tip;
@@ -3957,6 +3999,12 @@ function buildTree(todos) {
  * Leaf items with no effort set count as 1 point.
  * Returns { done, inProgress, open, total }.
  */
+function subItemProgressText(count, a) {
+  const unit = pointsOn() ? ' pts' : '';
+  return `${count} sub-items · ${a.done}/${a.total}${unit} done`
+    + (a.inProgress ? ` · ${a.inProgress}${unit} in progress` : '');
+}
+
 function aggregateSubtaskEffort(nodeId, allTodos) {
   // Build a parent→children map from the FULL flat todos list (includes retired items).
   // This is the only way to count sub-sub-items whose intermediate parent was filtered
@@ -3975,7 +4023,7 @@ function aggregateSubtaskEffort(nodeId, allTodos) {
         const s = agg(c.id);
         done += s.done; inProgress += s.inProgress; open += s.open;
       } else { // leaf
-        const w = c.effort ?? 1;
+        const w = pointsOn() ? (c.effort ?? 1) : 1;
         if (c.completed)        done       += w;
         else if (c.in_progress) inProgress += w;
         else                    open       += w;
@@ -4826,7 +4874,7 @@ function renderCard(project) {
         return el('div', {
           class: 'card-velocity',
           style: `background:${bg};color:${fg}`,
-          title: '14-day rolling average (effort points / day)',
+          title: pointsOn() ? '14-day rolling average (effort points / day)' : '14-day rolling average (tasks / day)',
         }, [v.toFixed(1)]);
       })()
     : null;
@@ -5331,9 +5379,9 @@ function renderTodoNode(node, group, card) {
         } else if (key === 'in_progress') {
           const limit = loadSettings().ip_effort_limit;
           const current = getInProgressEffort();
-          const adding = t.effort || 0;
+          const adding = inProgressWeight(t);
           if (adding > 0 && current + adding > limit) {
-            toast(`In-progress limit reached (${current}/${limit} pts). Complete something first.`);
+            toast(`In-progress limit reached (${current}/${limit} ${pointUnit()}). Complete something first.`);
             return;
           }
           patch = { in_progress: true, running: false, awaiting_review: false, flagged: false };
@@ -5394,9 +5442,9 @@ function renderTodoNode(node, group, card) {
         // open or flagged → mark in-progress (with effort limit check)
         const limit = loadSettings().ip_effort_limit;
         const current = getInProgressEffort();
-        const adding = t.effort || 0;
+        const adding = inProgressWeight(t);
         if (adding > 0 && current + adding > limit) {
-          toast(`In-progress limit reached (${current}/${limit} pts). Complete something first.`);
+          toast(`In-progress limit reached (${current}/${limit} ${pointUnit()}). Complete something first.`);
           return;
         }
         optimistic = { in_progress: true, running: false, awaiting_review: false, flagged: false };
@@ -5438,7 +5486,7 @@ function renderTodoNode(node, group, card) {
   const right = el('div', { class: 'todo-right' });
 
   // Effort badge — only for leaf items (super-items use the progress ring instead)
-  if (!node.children || !node.children.length) {
+  if (pointsOn() && (!node.children || !node.children.length)) {
     const effortBadge = el('button', {
       type: 'button',
       class: 'effort-badge' + (t.effort != null ? ' is-set' : ''),
@@ -5565,8 +5613,7 @@ function renderTodoNode(node, group, card) {
     const doneFrac = agg.total ? agg.done / agg.total : 0;
     const ipFrac   = agg.total ? (agg.done + agg.inProgress) / agg.total : 0;
     const ringTip = agg.total
-      ? `${node.children.length} sub-items · ${agg.done}/${agg.total} pts done`
-        + (agg.inProgress ? ` · ${agg.inProgress} pts in progress` : '')
+      ? subItemProgressText(node.children.length, agg)
       : `${node.children.length} sub-items`;
     const ring = el('span', { class: 'subtodo-ring' }, [
       el('span', {}, [String(node.children.length)]),
@@ -6478,7 +6525,7 @@ function _patchVelocityBadges() {
         const badge = el('div', {
           class: 'card-velocity',
           style: `background:${bg};color:${fg}`,
-          title: '14-day rolling average (effort points / day)',
+          title: pointsOn() ? '14-day rolling average (effort points / day)' : '14-day rolling average (tasks / day)',
         }, [v.toFixed(1)]);
         deadlineRow.insertBefore(badge, deadlineRow.querySelector('.card-usage'));
       }
@@ -6548,7 +6595,9 @@ function renderAccomplishmentPopover(dot, date, iso, items, totalEffort) {
   const head = el('div', { class: 'accomplishment-popover-head' }, [
     el('strong', { class: 'accomplishment-popover-date' }, [dateLabel]),
     el('span', { class: 'accomplishment-popover-total' }, [
-      `${items.length} completed · ${formatAccomplishmentEffort(totalEffort)} pts`,
+      pointsOn()
+        ? `${items.length} completed · ${formatAccomplishmentEffort(totalEffort)} pts`
+        : `${items.length} completed`,
     ]),
   ]);
 
@@ -6570,9 +6619,9 @@ function renderAccomplishmentPopover(dot, date, iso, items, totalEffort) {
       const effort = Number(item.effort || 0);
       list.appendChild(el('li', {}, [
         document.createTextNode(`${item.text} `),
-        el('span', { class: 'accomplishment-effort' }, [
+        pointsOn() ? el('span', { class: 'accomplishment-effort' }, [
           `${formatAccomplishmentEffort(effort)} pt${effort === 1 ? '' : 's'}`,
-        ]),
+        ]) : null,
       ]));
     }
     const toggle = el('button', {
@@ -6583,7 +6632,8 @@ function renderAccomplishmentPopover(dot, date, iso, items, totalEffort) {
       el('div', { class: 'accomplishment-project-line' }, [
         el('span', { class: 'accomplishment-project-name' }, [group.name]),
         el('span', { class: 'accomplishment-project-meta' }, [
-          `${group.items.length} task${group.items.length === 1 ? '' : 's'} · ${formatAccomplishmentEffort(group.effort)} pts`,
+          `${group.items.length} task${group.items.length === 1 ? '' : 's'}`
+            + (pointsOn() ? ` · ${formatAccomplishmentEffort(group.effort)} pts` : ''),
         ]),
       ]),
     ]);
@@ -6708,11 +6758,13 @@ function renderHeatmap() {
       ? 'Holiday / non-workday \u2014 click to mark as workday'
       : 'Workday \u2014 click to mark as holiday';
     dot.title = accomplishments.length
-      ? `${accomplishments.length} completed · ${formatAccomplishmentEffort(count)} pts \u2014 hover for details; ${dayTypeTitle.toLowerCase()}`
+      ? `${accomplishments.length} completed` + (pointsOn() ? ` · ${formatAccomplishmentEffort(count)} pts` : '')
+        + ` \u2014 hover for details; ${dayTypeTitle.toLowerCase()}`
       : dayTypeTitle;
     if (accomplishments.length) {
       dot.tabIndex = 0;
-      dot.setAttribute('aria-label', `${iso}: ${accomplishments.length} completed, ${formatAccomplishmentEffort(count)} points`);
+      dot.setAttribute('aria-label', `${iso}: ${accomplishments.length} completed`
+        + (pointsOn() ? `, ${formatAccomplishmentEffort(count)} points` : ''));
       dot.addEventListener('pointerenter', () => showAccomplishmentPopover(dot, date, iso, accomplishments, count));
       dot.addEventListener('pointerleave', scheduleAccomplishmentPopoverHide);
       dot.addEventListener('focus', () => showAccomplishmentPopover(dot, date, iso, accomplishments, count));
@@ -7264,6 +7316,20 @@ function scrollToCompletedTodo(todo, project) {
   const velInput    = document.getElementById('setting-vel-goal');
   const retireInput = document.getElementById('setting-retire-hours');
   const ipLimitInput = document.getElementById('setting-ip-limit');
+  const pointsToggle = document.getElementById('setting-points-enabled');
+  pointsToggle.addEventListener('change', async () => {
+    const enabled = pointsToggle.checked;
+    try {
+      _serverSettings = await api('PATCH', '/api/settings', { points_enabled: enabled });
+    } catch (err) {
+      pointsToggle.checked = !enabled;
+      toast(`Couldn't change effort points: ${err.message}`);
+      return;
+    }
+    applyPointsLabels();
+    // Server-side weights (heatmap, velocity) change too, so reload the board.
+    await reload();
+  });
   const themeBtns   = document.querySelectorAll('[data-theme-btn]');
 
   function applyTheme(theme) {
@@ -7283,6 +7349,7 @@ function scrollToCompletedTodo(todo, project) {
     retireInput.value  = s.retire_hours;
     ipLimitInput.value = s.ip_effort_limit;
     applyTheme(s.theme); // sync button highlights to current saved state
+    applyPointsLabels();
     pane.classList.remove('hidden');
     backdrop.classList.remove('hidden');
   }
@@ -7351,6 +7418,7 @@ function scrollToCompletedTodo(todo, project) {
     velInput.value     = s.vel_goal;
     retireInput.value  = s.retire_hours;
     ipLimitInput.value = s.ip_effort_limit;
+    applyPointsLabels();
   };
 
   // Apply saved theme on boot; seed inputs in case pane is opened before change fires.
@@ -8488,7 +8556,9 @@ function renderTourTips() {
     tip('Fill it with todos', 'Type into “Add todo…” on any card. Mark one as the blocker and it stays pinned to the top of the card.'),
     tip('Move it as it matures', 'Drag a card by its grip into another row. Its todos come along.'),
     tip('Let rows sort themselves', 'Below the top row, projects with the nearest deadlines come first, then the ones you have made the most recent progress on.'),
-    tip('Track your progress', 'Completing todos fills the daily dots at the top. Give todos effort points to weigh bigger tasks more.'),
+    tip('Track your progress', pointsOn()
+      ? 'Completing todos fills the daily dots at the top. Give todos effort points to weigh bigger tasks more.'
+      : 'Completing todos fills the daily dots at the top. Want to weigh bigger tasks more? Turn on effort points in Settings.'),
     tip('Change rows anytime', 'Open Settings (the gear icon) and choose Edit Rows. You can also replay this tour from there.'),
   ]);
 }

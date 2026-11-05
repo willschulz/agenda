@@ -144,6 +144,8 @@ def seed() -> None:
                 for_later_order += 1
 
     db.set_onboarding_pending(True)
+    # New boards count every task as 1; effort points can be turned on in Settings.
+    db.patch_settings({"points_enabled": False})
 
     n_proj = conn.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"]
     n_todo = conn.execute("SELECT COUNT(*) AS n FROM todos").fetchone()["n"]

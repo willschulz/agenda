@@ -33,12 +33,18 @@ def build_board_order(
         if (value.weekday() >= 5) == (value.isoformat() in overrides)
     )
 
+    # With effort points off (settings.points_enabled = 0), each task counts 1.
+    try:
+        setting = conn.execute("SELECT points_enabled FROM settings WHERE id = 1").fetchone()
+        points_on = True if setting is None else bool(setting[0])
+    except sqlite3.OperationalError:
+        points_on = True
     velocities: dict[int, float] = {}
     for row in conn.execute(
         "SELECT project_id, date(completed_at, ?) AS day, "
-        "COALESCE(effort, ?) AS effort "
-        "FROM todos WHERE completed = 1 AND completed_at IS NOT NULL",
-        (offset_modifier, DEFAULT_UNPOINTED_EFFORT),
+        + ("COALESCE(effort, ?) AS effort " if points_on else "? AS effort ")
+        + "FROM todos WHERE completed = 1 AND completed_at IS NOT NULL",
+        (offset_modifier, DEFAULT_UNPOINTED_EFFORT if points_on else 1.0),
     ).fetchall():
         if row["day"] in date_strings:
             velocities[row["project_id"]] = (

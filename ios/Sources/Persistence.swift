@@ -179,6 +179,8 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
     @Published private(set) var boardOrderRows: [String: [String]] = [:]
     /// The user's rows from the Mac (nil until a snapshot carrying them arrives).
     @Published private(set) var rowDefinitions: [AgendaRowDefinition]?
+    /// Effort points are shown unless the Mac has switched them off.
+    @Published private(set) var pointsEnabled = true
     @Published private(set) var heldDeletionBatch: AgendaHeldDeletionBatch?
 
     private let container: ModelContainer
@@ -251,6 +253,9 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
         if rowDefinitions != snapshot.rowDefinitions {
             rowDefinitions = snapshot.rowDefinitions
         }
+        if pointsEnabled != (snapshot.pointsEnabled ?? true) {
+            pointsEnabled = snapshot.pointsEnabled ?? true
+        }
         try? context.save()
     }
 
@@ -268,6 +273,9 @@ final class MobileAgendaStore: ObservableObject, AgendaCloudSyncStore, @unchecke
         }
         if rowDefinitions != snapshot.rowDefinitions {
             rowDefinitions = snapshot.rowDefinitions
+        }
+        if pointsEnabled != (snapshot.pointsEnabled ?? true) {
+            pointsEnabled = snapshot.pointsEnabled ?? true
         }
     }
 

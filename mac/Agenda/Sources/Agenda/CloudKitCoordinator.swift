@@ -1021,6 +1021,7 @@ final class CloudKitCoordinator: ObservableObject {
                let current = try? AgendaCloudRecord.decodeBoardOrder(existing) {
                 guard current.rows != snapshot.rows
                     || current.rowDefinitions != snapshot.rowDefinitions
+                    || current.pointsEnabled != snapshot.pointsEnabled
                 else { return }
                 guard current.generatedAt < snapshot.generatedAt else { return }
             }
@@ -1040,6 +1041,7 @@ final class CloudKitCoordinator: ObservableObject {
                 if let current = try? AgendaCloudRecord.decodeBoardOrder(server) {
                     guard current.rows != snapshot.rows
                         || current.rowDefinitions != snapshot.rowDefinitions
+                    || current.pointsEnabled != snapshot.pointsEnabled
                     else { return }
                     guard current.generatedAt < snapshot.generatedAt else { return }
                 }

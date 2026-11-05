@@ -316,6 +316,16 @@ final class AgendaSyncCoreTests: XCTestCase {
         """#.utf8)
         let decoded = try JSONDecoder().decode(AgendaBoardOrderSnapshot.self, from: legacy)
         XCTAssertNil(decoded.rowDefinitions)
+        XCTAssertNil(decoded.pointsEnabled)
+
+        let pointsOff = Data(#"""
+        {"schema_version": 2, "generated_at": "2026-11-05T22:00:00+00:00",
+         "rows": {}, "points_enabled": false}
+        """#.utf8)
+        XCTAssertEqual(
+            try JSONDecoder().decode(AgendaBoardOrderSnapshot.self, from: pointsOff).pointsEnabled,
+            false
+        )
         XCTAssertEqual(decoded.rows["top_of_mind"], ["project-a"])
     }
 
