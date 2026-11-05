@@ -35,7 +35,12 @@ done
 # terms live in the gitignored .privacy-patterns.local at the repo root.
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 pattern_files=("$REPO_ROOT/scripts/privacy-patterns.txt")
-[[ -f "$REPO_ROOT/.privacy-patterns.local" ]] && pattern_files+=("$REPO_ROOT/.privacy-patterns.local")
+local_patterns="$REPO_ROOT/.privacy-patterns.local"
+# Linked worktrees lack the gitignored file; use the main checkout's copy.
+if [[ ! -f "$local_patterns" ]] && common="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+    local_patterns="$(dirname "$common")/.privacy-patterns.local"
+fi
+[[ -f "$local_patterns" ]] && pattern_files+=("$local_patterns")
 forbidden=()
 while IFS= read -r line; do forbidden+=("$line"); done \
     < <(grep -h -v -E '^[[:space:]]*(#|$)' "${pattern_files[@]}")
