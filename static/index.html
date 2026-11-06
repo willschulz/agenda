@@ -222,6 +222,39 @@
   .heatmap-dot.hm-weekend.hm-today::before {
     display: none;
   }
+  /* Finished a parent with 2+ sub-tasks that day: 1-3 tiny pips above the dot,
+     more for bigger parents. Display only; counts are unchanged. */
+  .hm-finish {
+    position: absolute; left: 50%; bottom: calc(100% + 1px);
+    transform: translateX(-50%);
+    display: flex; gap: 1px; pointer-events: none;
+  }
+  .hm-finish i {
+    width: 2px; height: 2px; border-radius: 50%;
+    background: var(--accent); display: block;
+  }
+  .heatmap-dot.hm-weekend .hm-finish { transform: translateX(-50%) scale(1.6); }
+  /* Today's dot has the progress ring; sit the pips just above it. */
+  .heatmap-dot.hm-today .hm-finish { bottom: calc(100% + 3px); }
+  .accomplishment-finishes {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px 0 8px; margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-soft); font-size: 12px;
+  }
+  .accomplishment-finishes .star { color: var(--accent); margin-right: 4px; }
+  .accomplishment-finishes .meta { color: var(--text-muted); }
+  .finish-burst { position: fixed; width: 0; height: 0; pointer-events: none; z-index: 1000; }
+  .finish-burst i {
+    position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--green);
+    animation: finish-spark var(--dur, 650ms) cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  .finish-burst i:nth-child(3n) { background: var(--accent); }
+  @keyframes finish-spark {
+    0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .finish-burst { display: none; } }
   /* Ring — today's dot only; conic-gradient fills clockwise from 12 o'clock */
   .heatmap-dot.hm-today::before {
     content: "";
@@ -4005,6 +4038,63 @@ function subItemProgressText(count, a) {
     + (a.inProgress ? ` · ${a.inProgress}${unit} in progress` : '');
 }
 
+/** Size tier of a finished parent: 0 (not a parent / 1 sub-task), then 1-3. */
+function finishTier(subtasks) {
+  if (subtasks >= 8) return 3;
+  if (subtasks >= 4) return 2;
+  if (subtasks >= 2) return 1;
+  return 0;
+}
+
+/** Sub-tasks at every level below a todo, from its project's flat list. */
+function countSubtasks(todoId, allTodos) {
+  const byParent = {};
+  for (const t of allTodos || []) {
+    if (t.parent_id != null) (byParent[t.parent_id] = byParent[t.parent_id] || []).push(t.id);
+  }
+  let total = 0;
+  const stack = [...(byParent[todoId] || [])];
+  const seen = new Set();
+  while (stack.length) {
+    const id = stack.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    total += 1;
+    stack.push(...(byParent[id] || []));
+  }
+  return total;
+}
+
+/** A small burst at a finished parent, scaled to how many sub-tasks it had. */
+function celebrateBigFinish(rect, subtasks, title) {
+  if (finishTier(subtasks) === 0) return;
+  toast(`Finished “${title}”: ${subtasks} sub-tasks done.`);
+  if (!rect || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  const sparks = Math.min(12, 2 + subtasks);
+  const reach = 14 + Math.min(subtasks, 12) * 1.5;
+  const burst = el('div', { class: 'finish-burst' });
+  burst.style.left = `${rect.left + rect.width / 2}px`;
+  burst.style.top = `${rect.top + rect.height / 2}px`;
+  for (let i = 0; i < sparks; i++) {
+    const angle = (i / sparks) * Math.PI * 2 + Math.random() * 0.4;
+    const dist = reach * (0.75 + Math.random() * 0.35);
+    const spark = el('i');
+    spark.style.setProperty('--dx', `${(Math.cos(angle) * dist).toFixed(1)}px`);
+    spark.style.setProperty('--dy', `${(Math.sin(angle) * dist).toFixed(1)}px`);
+    spark.style.setProperty('--dur', `${560 + Math.min(subtasks, 12) * 15}ms`);
+    burst.appendChild(spark);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1000);
+}
+
+/** Parents with 2+ sub-tasks finished on a day, biggest first. */
+function bigFinishes(items) {
+  return (items || [])
+    .filter(item => finishTier(item.subtask_count || 0) > 0)
+    .sort((a, b) => (b.subtask_count || 0) - (a.subtask_count || 0));
+}
+
 function aggregateSubtaskEffort(nodeId, allTodos) {
   // Build a parent→children map from the FULL flat todos list (includes retired items).
   // This is the only way to count sub-sub-items whose intermediate parent was filtered
@@ -5450,9 +5540,18 @@ function renderTodoNode(node, group, card) {
         optimistic = { in_progress: true, running: false, awaiting_review: false, flagged: false };
         request = () => api('PATCH', `/api/todos/${t.id}`, optimistic);
       }
+      const finishing = !t.completed && t.in_progress;
+      const checkRect = finishing ? check.getBoundingClientRect() : null;
       await applyTodoStatus(t, node, group, card, row, optimistic, request);
       refreshHeatmap();
       if (t.parent_id != null) refreshAncestorRings(t, card);
+      if (finishing && node.children && node.children.length) {
+        const pid = Number(card && card.dataset && card.dataset.projectId);
+        let projectTodos = [];
+        for (const ps of Object.values(state.projects))
+          for (const p of ps) if (p.id === pid) projectTodos = p.todos || [];
+        celebrateBigFinish(checkRect, countSubtasks(t.id, projectTodos), t.text);
+      }
     } catch (err) { /* applyTodoStatus already toasted + reloaded */ }
   });
 
@@ -6613,6 +6712,15 @@ function renderAccomplishmentPopover(dot, date, iso, items, totalEffort) {
   }
 
   const content = [head];
+  const finished = bigFinishes(items);
+  if (finished.length) {
+    content.push(el('div', { class: 'accomplishment-finishes' }, finished.map(f =>
+      el('div', {}, [
+        el('span', { class: 'star', 'aria-hidden': 'true' }, ['★']),
+        `Finished “${f.text}” `,
+        el('span', { class: 'meta' }, [`· ${f.subtask_count} sub-tasks`]),
+      ]))));
+  }
   for (const group of groups.values()) {
     const list = el('ul', { class: 'accomplishment-list', hidden: '' });
     for (const item of group.items) {
@@ -6753,6 +6861,13 @@ function renderHeatmap() {
     if (daysAgo === 0) cls += ' hm-today';
     dot.className = cls;
     dot.style.setProperty('--dot-intensity', intensity.toFixed(3));
+    const finishes = bigFinishes(accomplishmentsByDay[iso]);
+    if (finishes.length) {
+      const subtasks = finishes.reduce((n, f) => n + f.subtask_count, 0);
+      const tier = finishTier(subtasks);
+      dot.appendChild(el('span', { class: 'hm-finish', 'aria-hidden': 'true' },
+        Array.from({ length: tier }, () => el('i'))));
+    }
     const accomplishments = daysAgo > 0 ? (accomplishmentsByDay[iso] || []) : [];
     const dayTypeTitle = isEffectiveWeekend
       ? 'Holiday / non-workday \u2014 click to mark as workday'
