@@ -681,13 +681,16 @@
     color: var(--review-color);
   }
   .card > .native-insight { margin: 8px 12px 2px; }
+  /* Row 3 belongs to .todo-right (effort badge, deadline clock, actions), so
+     the bubble gets its own row below it instead of drawing on top of them. */
   .todo > .native-insight {
-    grid-row: 3;
+    grid-row: 4;
     grid-column: 2 / -1;
     margin: 5px 0 2px;
   }
-  .todo > .native-insight + .subtodos-wrap,
   .todo > .subtodos-wrap { grid-row: 4; }
+  .todo > .native-insight + .subtodos-wrap,
+  .todo > .native-insight ~ .subtodos-wrap { grid-row: 5; }
   .native-insight-head {
     display: flex;
     align-items: flex-start;
