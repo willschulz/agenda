@@ -26,9 +26,9 @@
          CFBundleVersion is the build number and must increase monotonically
          for Sparkle to recognize an update. -->
     <key>CFBundleVersion</key>
-    <string>14</string>
+    <string>15</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.10.1</string>
+    <string>0.10.2</string>
 
     <!-- Matches Package.swift's .macOS(.v13). Without this, an older Mac
          launches the app and crashes on a missing symbol instead of being
