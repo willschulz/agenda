@@ -8965,6 +8965,26 @@ function maybeStartOnboarding(settings) {
 // 100% is the largest; zooming out re-lays out the rows so more fits.
 // ---------------------------------------------------------------------------
 const BOARD_ZOOM_STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
+
+// Sandbox-only pinch diagnostics (window.agendaPinchDebug is injected by the
+// "Agenda Sandbox" app): report events to the app's pinch-debug.log and show
+// the latest few on screen.
+const pinchDebugLines = [];
+function pinchDebug(message) {
+  if (!window.agendaPinchDebug) return;
+  try { window.webkit.messageHandlers.agendaPinchLog.postMessage(message); } catch {}
+  pinchDebugLines.push(message);
+  if (pinchDebugLines.length > 8) pinchDebugLines.shift();
+  let panel = document.getElementById('pinch-debug');
+  if (!panel) {
+    panel = el('pre', { id: 'pinch-debug', style:
+      'position:fixed;left:16px;bottom:52px;z-index:60;margin:0;max-width:420px;' +
+      'font:11px ui-monospace,Menlo,monospace;white-space:pre-wrap;pointer-events:none;' +
+      'background:rgba(0,0,0,.75);color:#9f9;padding:6px 8px;border-radius:6px' });
+    document.body.appendChild(panel);
+  }
+  panel.textContent = 'pinch log (sandbox)\n' + pinchDebugLines.join('\n');
+}
 const PINCH_STEP_THRESHOLD = 0.18;   // accumulated log-scale per step
 const boardZoom = { index: 0, pinchAccum: 0, pulseTimer: null };
 try {
@@ -8990,8 +9010,9 @@ function renderZoomIndicator(pulse) {
 }
 
 /** Move to a zoom step, keeping the board point under anchorY in place. */
-function setBoardZoomIndex(index, anchorY) {
+function setBoardZoomIndex(index, anchorY, reason = '') {
   index = Math.max(0, Math.min(BOARD_ZOOM_STEPS.length - 1, index));
+  pinchDebug(`zoom step ${boardZoom.index} -> ${index} (${reason})`);
   if (index === boardZoom.index) { renderZoomIndicator(true); return; }
   const rows = document.getElementById('rows');
   const oldZ = BOARD_ZOOM_STEPS[boardZoom.index];
@@ -9012,42 +9033,56 @@ function pinchBoard(factor, anchorY) {
   boardZoom.pinchAccum += Math.log(factor);
   while (boardZoom.pinchAccum <= -PINCH_STEP_THRESHOLD) {
     boardZoom.pinchAccum += PINCH_STEP_THRESHOLD;
-    setBoardZoomIndex(boardZoom.index + 1, anchorY);   // smaller
+    setBoardZoomIndex(boardZoom.index + 1, anchorY, 'pinch in');   // smaller
   }
   while (boardZoom.pinchAccum >= PINCH_STEP_THRESHOLD) {
     boardZoom.pinchAccum -= PINCH_STEP_THRESHOLD;
-    setBoardZoomIndex(boardZoom.index - 1, anchorY);   // larger
+    setBoardZoomIndex(boardZoom.index - 1, anchorY, 'pinch out');   // larger
   }
 }
 
 // The Mac app forwards trackpad pinches here (see WebView.swift).
-window.agendaPinch = (factor, x, y) => pinchBoard(factor, y);
-window.agendaPinchEnd = () => { boardZoom.pinchAccum = 0; };
+window.agendaPinch = (factor, x, y) => {
+  pinchDebug(`agendaPinch factor=${Number(factor).toFixed(4)}`);
+  pinchBoard(factor, y);
+};
+window.agendaPinchEnd = () => { boardZoom.pinchAccum = 0; pinchDebug('agendaPinchEnd'); };
 
 // In a browser: Chrome reports pinches as ctrl+wheel; Safari as gesture events.
 if (!window.agendaNativePinch) {
   window.addEventListener('wheel', e => {
     if (!e.ctrlKey) return;
+    pinchDebug(`wheel ctrl dy=${e.deltaY.toFixed(2)}`);
     e.preventDefault();
     pinchBoard(Math.exp(-e.deltaY * 0.01), e.clientY);
   }, { passive: false });
   let gestureScale = 1;
-  window.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; });
+  window.addEventListener('gesturestart', e => {
+    pinchDebug(`gesturestart scale=${e.scale}`);
+    e.preventDefault(); gestureScale = 1;
+  });
   window.addEventListener('gesturechange', e => {
+    pinchDebug(`gesturechange scale=${Number(e.scale).toFixed(4)}`);
     e.preventDefault();
     pinchBoard(e.scale / gestureScale, e.clientY);
     gestureScale = e.scale;
   });
-  window.addEventListener('gestureend', e => { e.preventDefault(); boardZoom.pinchAccum = 0; });
+  window.addEventListener('gestureend', e => {
+    pinchDebug(`gestureend scale=${Number(e.scale).toFixed(4)}`);
+    e.preventDefault(); boardZoom.pinchAccum = 0;
+  });
 }
 
 document.addEventListener('keydown', e => {
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-  if (e.key === '-' || e.key === '_') { e.preventDefault(); setBoardZoomIndex(boardZoom.index + 1); }
-  else if (e.key === '=' || e.key === '+') { e.preventDefault(); setBoardZoomIndex(boardZoom.index - 1); }
-  else if (e.key === '0') { e.preventDefault(); setBoardZoomIndex(0); }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); setBoardZoomIndex(boardZoom.index + 1, undefined, 'key'); }
+  else if (e.key === '=' || e.key === '+') { e.preventDefault(); setBoardZoomIndex(boardZoom.index - 1, undefined, 'key'); }
+  else if (e.key === '0') { e.preventDefault(); setBoardZoomIndex(0, undefined, 'key'); }
 });
-document.getElementById('zoom-indicator').addEventListener('click', () => setBoardZoomIndex(0));
+document.getElementById('zoom-indicator').addEventListener('click', () => setBoardZoomIndex(0, undefined, 'pill'));
+if (window.agendaPinchDebug) {
+  pinchDebug(`page loaded; strategy=${window.agendaNativePinch ? 'native' : 'web'}; zoom=${BOARD_ZOOM_STEPS[boardZoom.index]}`);
+}
 document.documentElement.style.setProperty('--board-zoom', String(BOARD_ZOOM_STEPS[boardZoom.index]));
 renderZoomIndicator(false);
 </script>
