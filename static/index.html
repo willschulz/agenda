@@ -255,8 +255,16 @@
     100% { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) { .finish-burst { display: none; } }
-  /* Board zoom (pinch, ⌘−/⌘=/⌘0): re-lays out the rows smaller. 1 is the max. */
-  #rows { zoom: var(--board-zoom, 1); }
+  /* Board zoom (pinch, ⌘−/⌘=/⌘0): an optical zoom. The rows are laid out as
+     if the window were 1/zoom wider, then scaled down as one picture, so text,
+     spacing, and wrapping shrink together. CSS `zoom` was not used because
+     WebKit clamps zoomed text to a minimum font size, which re-wrapped text
+     at small zooms. 1 is the max. */
+  #rows { transform-origin: 0 0; }
+  #rows.zoomed {
+    transform: scale(var(--board-zoom, 1));
+    width: calc(100% / var(--board-zoom, 1));
+  }
   #zoom-indicator {
     position: fixed; left: 16px; bottom: 16px; z-index: 50;
     font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
@@ -9021,7 +9029,7 @@ function setBoardZoomIndex(index, anchorY, reason = '') {
   const rowsTop = rows ? rows.getBoundingClientRect().top + window.scrollY : 0;
   const boardY = (window.scrollY + y - rowsTop) / oldZ;
   boardZoom.index = index;
-  document.documentElement.style.setProperty('--board-zoom', String(newZ));
+  applyBoardZoom();
   window.scrollTo(window.scrollX, Math.max(0, rowsTop + boardY * newZ - y));
   try { localStorage.setItem('agenda.boardZoom', String(newZ)); } catch {}
   renderZoomIndicator(true);
@@ -9083,7 +9091,25 @@ document.getElementById('zoom-indicator').addEventListener('click', () => setBoa
 if (window.agendaPinchDebug) {
   pinchDebug(`page loaded; strategy=${window.agendaNativePinch ? 'native' : 'web'}; zoom=${BOARD_ZOOM_STEPS[boardZoom.index]}`);
 }
-document.documentElement.style.setProperty('--board-zoom', String(BOARD_ZOOM_STEPS[boardZoom.index]));
+/** Apply the current step. A transform doesn't shrink the layout box, so a
+ *  negative bottom margin removes the empty space it would leave below. */
+function applyBoardZoom() {
+  const z = BOARD_ZOOM_STEPS[boardZoom.index];
+  const rows = document.getElementById('rows');
+  document.documentElement.style.setProperty('--board-zoom', String(z));
+  if (!rows) return;
+  rows.classList.toggle('zoomed', z < 1);
+  rows.style.marginBottom = z < 1 ? `${-(rows.offsetHeight * (1 - z))}px` : '';
+}
+if (typeof ResizeObserver !== 'undefined') {
+  // Re-trim the space below whenever the board's height changes (renders).
+  new ResizeObserver(() => {
+    const rows = document.getElementById('rows');
+    const z = BOARD_ZOOM_STEPS[boardZoom.index];
+    if (rows && z < 1) rows.style.marginBottom = `${-(rows.offsetHeight * (1 - z))}px`;
+  }).observe(document.getElementById('rows'));
+}
+applyBoardZoom();
 renderZoomIndicator(false);
 </script>
 </body>
