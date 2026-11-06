@@ -21,10 +21,11 @@ class StatsAPITests(unittest.IsolatedAsyncioTestCase):
               text TEXT NOT NULL,
               completed INTEGER NOT NULL,
               completed_at TEXT,
-              effort INTEGER
+              effort INTEGER,
+              parent_id INTEGER
             );
             INSERT INTO projects (id, name) VALUES (1, 'Agenda');
-            INSERT INTO todos VALUES
+            INSERT INTO todos (id, project_id, text, completed, completed_at, effort) VALUES
               (10, 1, 'Publish release', 1, '2026-08-08T01:30:00+00:00', 3),
               (11, 1, 'Write release notes', 1, '2026-08-08T00:30:00+00:00', NULL),
               (12, 1, 'Still open', 0, NULL, 5);
