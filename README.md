@@ -74,6 +74,10 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
   completed todos. Selecting one jumps to it on the board.
 - **Live updates**: every open window or tab stays current through a
   Server-Sent Events stream.
+- **Board zoom**: pinch the trackpad (or press ⌘− / ⌘= / ⌘0) to step the
+  board between 100% and 40%, so more of it fits on screen. The header stays
+  full size, a small pill shows the level (click it to reset), and each
+  device remembers its zoom.
 - **Usage-limit pace dials**: optional gauges for Claude and/or Cursor
   subscription limits (see [AI and usage tracking](#ai-and-usage-tracking)).
 
