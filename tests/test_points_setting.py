@@ -90,6 +90,27 @@ class PointsSettingTests(unittest.TestCase):
         self.assertFalse(db.points_enabled())
 
 
+class SubtaskCountTests(PointsSettingTests):
+    def test_accomplishments_report_subtasks_at_every_level(self):
+        stamp = datetime.now(timezone.utc).isoformat()
+        def add(parent=None, done=0):
+            return self.conn.execute(
+                "INSERT INTO todos (project_id, parent_id, text, completed, completed_at, "
+                "created_at, updated_at) VALUES (?, ?, 't', ?, ?, ?, ?)",
+                (self.pid, parent, done, stamp if done else None, stamp, stamp)).lastrowid
+        parent = add(done=1)
+        child = add(parent, done=1)
+        add(child)            # grandchild, still open: still a sub-task
+        add(parent, done=1)
+        data = asyncio.run(main.stats(since=None, tz_offset_minutes=0))
+        counts = {i["todo_id"]: i["subtask_count"]
+                  for items in data["accomplishments_by_day"].values() for i in items}
+        self.assertEqual(counts[parent], 3)
+        self.assertEqual(counts[child], 1)
+        # Display only: totals still count every completed task once.
+        self.assertEqual(data["total_completed"], 6)
+
+
 class NewBoardTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -1741,6 +1741,23 @@ async def stats(
         "ORDER BY day DESC, t.completed_at DESC, t.id DESC",
         (offset_modifier, unpointed, offset_modifier, since),
     ).fetchall()
+    # Sub-tasks at every level below each todo, so the UI can celebrate
+    # finishing a big parent. Display only: it never changes any count.
+    children: dict[int, list[int]] = {}
+    for link in conn.execute("SELECT id, parent_id FROM todos WHERE parent_id IS NOT NULL"):
+        children.setdefault(link["parent_id"], []).append(link["id"])
+
+    def subtask_count(todo_id: int) -> int:
+        total, stack, seen = 0, list(children.get(todo_id, [])), set()
+        while stack:
+            child = stack.pop()
+            if child in seen:
+                continue
+            seen.add(child)
+            total += 1
+            stack.extend(children.get(child, []))
+        return total
+
     accomplishments_by_day: dict[str, list[dict[str, Any]]] = {}
     for row in accomplishment_rows:
         accomplishments_by_day.setdefault(row["day"], []).append(
@@ -1750,6 +1767,7 @@ async def stats(
                 "project_name": row["project_name"],
                 "text": row["text"],
                 "effort": float(row["effort"]),
+                "subtask_count": subtask_count(row["todo_id"]),
             }
         )
 
