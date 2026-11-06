@@ -153,25 +153,43 @@ struct WebView: NSViewRepresentable {
         )
         config.userContentController.addUserScript(userScript)
         config.userContentController.add(context.coordinator.clipboardBridge, name: clipboardBridgeMessageHandlerName)
-        // Pinch-to-zoom on the board is driven natively (below), so the page
-        // ignores WebKit's own pinch events and never double-applies a pinch.
-        config.userContentController.addUserScript(WKUserScript(
-            source: "window.agendaNativePinch = true;",
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        ))
+        // Board pinch-zoom (see PinchSupport.swift). With the native strategy
+        // the page ignores WebKit's own pinch events so nothing double-applies.
+        let strategy = PinchStrategy.current
+        if strategy == .native {
+            config.userContentController.addUserScript(WKUserScript(
+                source: "window.agendaNativePinch = true;",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
+        if PinchLog.isEnabled {
+            config.userContentController.addUserScript(WKUserScript(
+                source: "window.agendaPinchDebug = true;",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+            config.userContentController.add(
+                context.coordinator.pinchLog, name: PinchLog.messageHandlerName)
+        }
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = AgendaWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         // Whole-page magnification stays off: a pinch zooms only the board,
         // re-laying it out (see agendaPinch in static/index.html).
         webView.allowsMagnification = false
-        webView.addGestureRecognizer(NSMagnificationGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handlePinch(_:))
-        ))
+        if PinchLog.isEnabled {
+            webView.pinchLog = context.coordinator.pinchLog
+            context.coordinator.pinchLog.write("---- launch, strategy=\(strategy.rawValue)")
+        }
+        if strategy == .native {
+            webView.addGestureRecognizer(NSMagnificationGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handlePinch(_:))
+            ))
+        }
         state.webView = webView
         return webView
     }
@@ -187,6 +205,7 @@ struct WebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let state: WebViewState
         let clipboardBridge = ClipboardBridge()
+        let pinchLog = PinchLog()
         var loadedURL: URL? = nil
 
         init(state: WebViewState) { self.state = state }
@@ -197,6 +216,10 @@ struct WebView: NSViewRepresentable {
         /// anchored at the pinch location (page coordinates, top-left origin).
         @objc func handlePinch(_ gesture: NSMagnificationGestureRecognizer) {
             guard let webView = gesture.view as? WKWebView else { return }
+            pinchLog.write(String(
+                format: "native recognizer state=%ld magnification=%.4f",
+                gesture.state.rawValue, gesture.magnification
+            ))
             switch gesture.state {
             case .began:
                 lastMagnification = 0
