@@ -153,11 +153,25 @@ struct WebView: NSViewRepresentable {
         )
         config.userContentController.addUserScript(userScript)
         config.userContentController.add(context.coordinator.clipboardBridge, name: clipboardBridgeMessageHandlerName)
+        // Pinch-to-zoom on the board is driven natively (below), so the page
+        // ignores WebKit's own pinch events and never double-applies a pinch.
+        config.userContentController.addUserScript(WKUserScript(
+            source: "window.agendaNativePinch = true;",
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
+        // Whole-page magnification stays off: a pinch zooms only the board,
+        // re-laying it out (see agendaPinch in static/index.html).
+        webView.allowsMagnification = false
+        webView.addGestureRecognizer(NSMagnificationGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePinch(_:))
+        ))
         state.webView = webView
         return webView
     }
@@ -176,6 +190,30 @@ struct WebView: NSViewRepresentable {
         var loadedURL: URL? = nil
 
         init(state: WebViewState) { self.state = state }
+
+        private var lastMagnification: CGFloat = 0
+
+        /// Forwards trackpad pinches to the page as incremental zoom factors,
+        /// anchored at the pinch location (page coordinates, top-left origin).
+        @objc func handlePinch(_ gesture: NSMagnificationGestureRecognizer) {
+            guard let webView = gesture.view as? WKWebView else { return }
+            switch gesture.state {
+            case .began:
+                lastMagnification = 0
+            case .changed:
+                let delta = gesture.magnification - lastMagnification
+                lastMagnification = gesture.magnification
+                let point = gesture.location(in: webView)
+                let y = webView.isFlipped ? point.y : webView.bounds.height - point.y
+                let factor = max(0.5, min(1.5, 1 + delta))
+                webView.evaluateJavaScript(
+                    "window.agendaPinch && window.agendaPinch(\(factor), \(point.x), \(y))"
+                )
+            default:
+                lastMagnification = 0
+                webView.evaluateJavaScript("window.agendaPinchEnd && window.agendaPinchEnd()")
+            }
+        }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             DispatchQueue.main.async {

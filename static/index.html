@@ -255,6 +255,18 @@
     100% { transform: translate(var(--dx), var(--dy)) scale(.4); opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) { .finish-burst { display: none; } }
+  /* Board zoom (pinch, ⌘−/⌘=/⌘0): re-lays out the rows smaller. 1 is the max. */
+  #rows { zoom: var(--board-zoom, 1); }
+  #zoom-indicator {
+    position: fixed; left: 16px; bottom: 16px; z-index: 50;
+    font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+    color: var(--text-muted); background: var(--bg-elevated);
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+    box-shadow: var(--shadow); cursor: pointer; opacity: .7;
+    transition: opacity .2s;
+  }
+  #zoom-indicator:hover, #zoom-indicator.pulse { opacity: 1; color: var(--text); }
+  #zoom-indicator.hidden { display: none; }
   /* Ring — today's dot only; conic-gradient fills clockwise from 12 o'clock */
   .heatmap-dot.hm-today::before {
     content: "";
@@ -3041,6 +3053,8 @@
 </aside>
 <div id="search-backdrop" class="hidden"></div>
 
+<button id="zoom-indicator" class="hidden" type="button"
+        title="Board zoom. Click (or ⌘0) to reset to 100%."></button>
 <main id="app">
   <div id="rows"></div>
 </main>
@@ -8945,6 +8959,97 @@ function maybeStartOnboarding(settings) {
   rowsEditor.shownThisLoad = true;
   openRowsEditor('welcome');
 }
+
+// ---------------------------------------------------------------------------
+// Board zoom: pinch (or ⌘−/⌘=/⌘0) steps the whole board between fixed sizes.
+// 100% is the largest; zooming out re-lays out the rows so more fits.
+// ---------------------------------------------------------------------------
+const BOARD_ZOOM_STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
+const PINCH_STEP_THRESHOLD = 0.18;   // accumulated log-scale per step
+const boardZoom = { index: 0, pinchAccum: 0, pulseTimer: null };
+try {
+  const saved = Number(localStorage.getItem('agenda.boardZoom'));
+  const found = BOARD_ZOOM_STEPS.indexOf(saved);
+  if (found >= 0) boardZoom.index = found;
+} catch {}
+
+function renderZoomIndicator(pulse) {
+  const pill = document.getElementById('zoom-indicator');
+  if (!pill) return;
+  const z = BOARD_ZOOM_STEPS[boardZoom.index];
+  pill.textContent = `${Math.round(z * 100)}%`;
+  pill.classList.toggle('hidden', z === 1 && !pulse);
+  if (pulse) {
+    pill.classList.add('pulse');
+    clearTimeout(boardZoom.pulseTimer);
+    boardZoom.pulseTimer = setTimeout(() => {
+      pill.classList.remove('pulse');
+      if (BOARD_ZOOM_STEPS[boardZoom.index] === 1) pill.classList.add('hidden');
+    }, 1200);
+  }
+}
+
+/** Move to a zoom step, keeping the board point under anchorY in place. */
+function setBoardZoomIndex(index, anchorY) {
+  index = Math.max(0, Math.min(BOARD_ZOOM_STEPS.length - 1, index));
+  if (index === boardZoom.index) { renderZoomIndicator(true); return; }
+  const rows = document.getElementById('rows');
+  const oldZ = BOARD_ZOOM_STEPS[boardZoom.index];
+  const newZ = BOARD_ZOOM_STEPS[index];
+  const y = anchorY ?? window.innerHeight / 2;
+  const rowsTop = rows ? rows.getBoundingClientRect().top + window.scrollY : 0;
+  const boardY = (window.scrollY + y - rowsTop) / oldZ;
+  boardZoom.index = index;
+  document.documentElement.style.setProperty('--board-zoom', String(newZ));
+  window.scrollTo(window.scrollX, Math.max(0, rowsTop + boardY * newZ - y));
+  try { localStorage.setItem('agenda.boardZoom', String(newZ)); } catch {}
+  renderZoomIndicator(true);
+}
+
+/** Accumulate a pinch (factor > 1 = fingers apart) into whole steps. */
+function pinchBoard(factor, anchorY) {
+  if (!(factor > 0)) return;
+  boardZoom.pinchAccum += Math.log(factor);
+  while (boardZoom.pinchAccum <= -PINCH_STEP_THRESHOLD) {
+    boardZoom.pinchAccum += PINCH_STEP_THRESHOLD;
+    setBoardZoomIndex(boardZoom.index + 1, anchorY);   // smaller
+  }
+  while (boardZoom.pinchAccum >= PINCH_STEP_THRESHOLD) {
+    boardZoom.pinchAccum -= PINCH_STEP_THRESHOLD;
+    setBoardZoomIndex(boardZoom.index - 1, anchorY);   // larger
+  }
+}
+
+// The Mac app forwards trackpad pinches here (see WebView.swift).
+window.agendaPinch = (factor, x, y) => pinchBoard(factor, y);
+window.agendaPinchEnd = () => { boardZoom.pinchAccum = 0; };
+
+// In a browser: Chrome reports pinches as ctrl+wheel; Safari as gesture events.
+if (!window.agendaNativePinch) {
+  window.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    pinchBoard(Math.exp(-e.deltaY * 0.01), e.clientY);
+  }, { passive: false });
+  let gestureScale = 1;
+  window.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; });
+  window.addEventListener('gesturechange', e => {
+    e.preventDefault();
+    pinchBoard(e.scale / gestureScale, e.clientY);
+    gestureScale = e.scale;
+  });
+  window.addEventListener('gestureend', e => { e.preventDefault(); boardZoom.pinchAccum = 0; });
+}
+
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); setBoardZoomIndex(boardZoom.index + 1); }
+  else if (e.key === '=' || e.key === '+') { e.preventDefault(); setBoardZoomIndex(boardZoom.index - 1); }
+  else if (e.key === '0') { e.preventDefault(); setBoardZoomIndex(0); }
+});
+document.getElementById('zoom-indicator').addEventListener('click', () => setBoardZoomIndex(0));
+document.documentElement.style.setProperty('--board-zoom', String(BOARD_ZOOM_STEPS[boardZoom.index]));
+renderZoomIndicator(false);
 </script>
 </body>
 </html>
