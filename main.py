@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import uuid
+import zlib
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -116,6 +117,40 @@ def normalize_notes(items, default_ts: str | None = None) -> list:
         elif isinstance(item, str):
             result.append({"ts": default_ts, "author": "human", "text": item})
     return result
+
+
+def _notes_rev(notes: list) -> str:
+    """Stable fingerprint of a todo's notes, so clients can cache note text."""
+    raw = json.dumps(notes, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return format(zlib.crc32(raw.encode("utf-8")), "08x") + format(len(raw), "x")
+
+
+def _notes_latest_ts(notes: list) -> str | None:
+    """The note timestamp that parses to the latest instant, as stored."""
+    best, best_key = None, None
+    for entry in notes:
+        ts = entry.get("ts") if isinstance(entry, dict) else None
+        if not isinstance(ts, str) or not ts:
+            continue
+        try:
+            parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            key = parsed.timestamp()
+        except ValueError:
+            continue
+        if best_key is None or key > best_key:
+            best, best_key = ts, key
+    return best
+
+
+def _summarize_todo_notes(todo: dict) -> dict:
+    """Replace a todo's note text with count, latest timestamp, and revision."""
+    notes = todo.pop("notes", None) or []
+    todo["notes_count"] = len(notes)
+    todo["notes_latest_ts"] = _notes_latest_ts(notes)
+    todo["notes_rev"] = _notes_rev(notes)
+    return todo
 
 
 def _compute_project_deadlines(todos_by_project: dict[int, list[dict]]) -> dict[int, str | None]:
@@ -860,8 +895,16 @@ async def board_events(request: Request):
 
 
 @app.get("/api/projects")
-async def list_projects(include_archived: bool = Query(default=False)):
-    """All projects with their todos, grouped by category."""
+async def list_projects(
+    include_archived: bool = Query(default=False),
+    todo_notes: str = Query(default="full", pattern="^(full|summary)$"),
+):
+    """All projects with their todos, grouped by category.
+
+    todo_notes=summary drops each todo's note text (most of the payload) and
+    sends notes_count, notes_latest_ts, and notes_rev instead; clients fetch
+    the text from /api/todo-notes only for revisions they have not cached.
+    """
     conn = db.get_conn()
     where = "" if include_archived else "WHERE archived = 0"
     proj_rows = conn.execute(
@@ -875,7 +918,10 @@ async def list_projects(include_archived: bool = Query(default=False)):
 
     todos_by_project: dict[int, list[dict]] = {}
     for r in todo_rows:
-        todos_by_project.setdefault(r["project_id"], []).append(_todo_to_dict(r))
+        todo = _todo_to_dict(r)
+        if todo_notes == "summary":
+            _summarize_todo_notes(todo)
+        todos_by_project.setdefault(r["project_id"], []).append(todo)
 
     computed_deadlines = _compute_project_deadlines(todos_by_project)
 
@@ -892,6 +938,43 @@ async def list_projects(include_archived: bool = Query(default=False)):
         "rows": [{"key": r["key"], "label": r["label"], "locked": r["locked"]} for r in rows],
         "projects": grouped,
     }
+
+
+@app.get("/api/todo-notes")
+async def list_todo_notes(ids: str = Query(default="")):
+    """Note text and revision for the given todo ids (comma-separated).
+
+    With no ids, returns every todo that has notes. Unknown ids are omitted.
+    Pairs with GET /api/projects?todo_notes=summary.
+    """
+    conn = db.get_conn()
+    wanted: list[int] = []
+    for part in ids.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if not part.isdigit():
+            raise HTTPException(status_code=422, detail=f"invalid todo id: {part!r}")
+        wanted.append(int(part))
+    if len(wanted) > 500:
+        raise HTTPException(status_code=422, detail="at most 500 ids per request")
+    if wanted:
+        marks = ",".join("?" for _ in wanted)
+        rows = conn.execute(
+            f"SELECT id, notes FROM todos WHERE id IN ({marks})", wanted
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, notes FROM todos WHERE notes IS NOT NULL "
+            "AND notes NOT IN ('', '[]')"
+        ).fetchall()
+    result: dict[str, dict] = {}
+    for r in rows:
+        notes = normalize_notes(r["notes"] or "[]")
+        if not wanted and not notes:
+            continue
+        result[str(r["id"])] = {"rev": _notes_rev(notes), "notes": notes}
+    return {"todos": result}
 
 
 @app.get("/api/sync/snapshot")
