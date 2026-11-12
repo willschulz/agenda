@@ -6,6 +6,8 @@ Use an eight-second timeout for reads so a closed app fails quickly.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/projects` | Read projects and todos |
+| `GET` | `/api/projects?todo_notes=summary` | Same, but each todo carries `notes_count`, `notes_latest_ts` and `notes_rev` instead of note text |
+| `GET` | `/api/todo-notes?ids=<id>,<id>` | Note text and `rev` per todo (up to 500 ids; no `ids` returns every todo with notes) |
 | `GET` | `/api/search?q=<terms>&include_completed=true` | Find related work |
 | `PATCH` | `/api/todos/<id>` | Update `running` or ordinary todo fields |
 | `POST` | `/api/todos/<id>/notes` | Append a todo lab note |

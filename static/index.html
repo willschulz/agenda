@@ -3417,6 +3417,7 @@ const ADD_TODO_STICKY_MS = 60000;
 let _addTodoSticky = null; // { projectId, expiresAt }
 let _pendingAddTodoRefocus = false;
 let openAgendaSearch = null;
+let _rerunOpenSearch = null;
 
 function _addTodoStickyValid() {
   if (!_addTodoSticky) return false;
@@ -5164,7 +5165,9 @@ function renderCard(project) {
 }
 
 function todoHasContext(t) {
-  return (Array.isArray(t.notes) && t.notes.length > 0) || (Array.isArray(t.paths) && t.paths.length > 0);
+  return (Array.isArray(t.notes) && t.notes.length > 0)
+    || t.notes_count > 0
+    || (Array.isArray(t.paths) && t.paths.length > 0);
 }
 
 /** Return the project object that owns the given todoId, or null. */
@@ -6548,7 +6551,15 @@ function openProjectModal(projectId, defaultCategory) {
   }
 }
 
-function openTodoContextModal(todo) {
+async function openTodoContextModal(todo) {
+  // Saving writes the whole notes list back, so never open on cached notes.
+  let notes;
+  try {
+    notes = await fetchTodoNotesFresh(todo.id);
+  } catch (err) {
+    toast('Could not load notes: ' + err.message);
+    return;
+  }
   state.modalProjectId = null;
   state.modalTodoId = todo.id;
   setModalMode('todo');
@@ -6556,7 +6567,7 @@ function openTodoContextModal(todo) {
   fTodoText.textContent = todo.text || '';
   fPaths.value = (todo.paths || []).join('\n');
   fTodoDeadline.value = todo.deadline || '';
-  _setNotes(Array.isArray(todo.notes) ? [...todo.notes] : []);
+  _setNotes([...notes]);
   _setNotesEdit(null); fNoteInput.value = '';
   renderNotesList();
 
@@ -6962,7 +6973,7 @@ function renderHeatmap() {
 // ---------------------------------------------------------------------------
 
 function activityTimestamp(todo) {
-  const values = [todo.updated_at, todo.created_at, todo.completed_at];
+  const values = [todo.updated_at, todo.created_at, todo.completed_at, todo.notes_latest_ts];
   for (const note of (todo.notes || [])) {
     if (note && typeof note === 'object') values.push(note.ts);
   }
@@ -7070,7 +7081,7 @@ async function _reloadOnce() {
   setStatus('Loading…');
   try {
     const [data, statsData, overridesData, settingsData, capabilitiesData, insightsData] = await Promise.all([
-      api('GET', '/api/projects?include_archived=true'),
+      api('GET', '/api/projects?include_archived=true&todo_notes=summary'),
       api('GET', `/api/stats?${statsQueryString()}`).catch(() => ({ by_day: {}, accomplishments_by_day: {} })),
       api('GET', '/api/day-overrides').catch(() => ({ dates: [] })),
       api('GET', '/api/settings').catch(() => null),
@@ -7097,6 +7108,7 @@ async function _reloadOnce() {
     }
     state.projects = grouped;
     state.archivedProjects = archived;
+    attachCachedTodoNotes();
     state.stats = statsData;
     state.dayOverrides = new Set(overridesData.dates);
     state.capabilities = capabilitiesData;
@@ -7118,10 +7130,110 @@ async function _reloadOnce() {
     scheduleProactiveRecap();
     updateIpEffortMeter();
     if (_hasPendingLLM()) _schedulePendingPoll();
+    refreshStaleTodoNotes();
   } catch (err) {
     setStatus('offline');
     toast(err.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Todo note text cache
+// ---------------------------------------------------------------------------
+// The board loads todos with notes_count / notes_latest_ts / notes_rev instead
+// of note text, which was about half of every board refresh. Note text lives in
+// this cache, keyed by todo id and revision: the first load fetches it all
+// once, and later refreshes fetch only todos whose revision changed. Search
+// reads todo.notes from here (slightly stale for a moment after a change is
+// fine); the context editor always fetches fresh notes before it opens,
+// because saving it writes the whole notes list back.
+const _todoNotesCache = new Map(); // todo id -> { rev, notes }
+let _todoNotesPrimed = false;
+let _todoNotesFetching = false;
+let _todoNotesRefetch = false;
+const TODO_NOTES_BATCH = 400;
+
+function _allBoardTodos() {
+  const out = [];
+  for (const projs of Object.values(state.projects)) {
+    for (const p of projs) out.push(...(p.todos || []));
+  }
+  for (const p of (state.archivedProjects || [])) out.push(...(p.todos || []));
+  return out;
+}
+
+/** Give each summarized todo its cached note text. Returns ids needing a fetch. */
+function attachCachedTodoNotes() {
+  const stale = [];
+  for (const t of _allBoardTodos()) {
+    if (typeof t.notes_rev !== 'string') continue; // already full (not summarized)
+    const cached = _todoNotesCache.get(t.id);
+    if (!t.notes_count) {
+      t.notes = [];
+    } else if (cached && cached.rev === t.notes_rev) {
+      t.notes = cached.notes;
+    } else {
+      t.notes = cached ? cached.notes : [];
+      stale.push(t.id);
+    }
+  }
+  return stale;
+}
+
+function _storeTodoNotes(payload) {
+  for (const [id, entry] of Object.entries((payload && payload.todos) || {})) {
+    if (entry && Array.isArray(entry.notes)) {
+      _todoNotesCache.set(Number(id), { rev: String(entry.rev), notes: entry.notes });
+    }
+  }
+}
+
+function _anySearchActive() {
+  const pane = document.getElementById('search-pane');
+  if (pane && !pane.classList.contains('hidden')) return true;
+  return Object.values(state.cardSearchQuery || {}).some(q => (q || '').trim());
+}
+
+/** Fetch note text for todos whose revision is not cached, then re-attach. */
+async function refreshStaleTodoNotes() {
+  if (_todoNotesFetching) { _todoNotesRefetch = true; return; }
+  _todoNotesFetching = true;
+  let changed = false;
+  try {
+    do {
+      _todoNotesRefetch = false;
+      const stale = attachCachedTodoNotes();
+      if (!stale.length) break;
+      if (!_todoNotesPrimed) {
+        _storeTodoNotes(await api('GET', '/api/todo-notes'));
+        _todoNotesPrimed = true;
+      } else {
+        for (let i = 0; i < stale.length; i += TODO_NOTES_BATCH) {
+          const ids = stale.slice(i, i + TODO_NOTES_BATCH).join(',');
+          _storeTodoNotes(await api('GET', `/api/todo-notes?ids=${ids}`));
+        }
+      }
+      attachCachedTodoNotes();
+      changed = true;
+    } while (_todoNotesRefetch);
+  } catch (err) {
+    console.warn('todo notes refresh failed', err);
+  } finally {
+    _todoNotesFetching = false;
+  }
+  if (changed && _anySearchActive()) {
+    _renderNoFlashSuppression = true;
+    try { render(); } finally { _renderNoFlashSuppression = false; }
+    if (typeof _rerunOpenSearch === 'function') _rerunOpenSearch();
+  }
+}
+
+/** Current notes for one todo, straight from the server (updates the cache). */
+async function fetchTodoNotesFresh(todoId) {
+  const payload = await api('GET', `/api/todo-notes?ids=${Number(todoId)}`);
+  _storeTodoNotes(payload);
+  const entry = payload && payload.todos && payload.todos[String(todoId)];
+  return entry && Array.isArray(entry.notes) ? entry.notes : [];
 }
 
 async function reload() {
@@ -7417,6 +7529,9 @@ function scrollToTodo(todo, project) {
   function doSearch() {
     renderResults(runSearch(input.value), input.value);
   }
+  _rerunOpenSearch = () => {
+    if (!pane.classList.contains('hidden') && input.value.trim()) doSearch();
+  };
 
   input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
   submitBtn.addEventListener('click', doSearch);
