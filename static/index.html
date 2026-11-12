@@ -3020,6 +3020,16 @@
       already logged on this Mac (Claude Code today). Stays on this device; no prompt text is stored.
       <span id="setting-usage-status"></span></p>
   </div>
+  <div class="settings-group" style="margin-top:20px" id="setting-claude-limits">
+    <label>Claude usage limits</label>
+    <p class="settings-hint" id="setting-claude-limits-status">Checking Claude Code…</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap" id="setting-claude-limits-actions"></div>
+    <p class="settings-hint">Shows your Claude 5-hour and weekly limits as dials on the board.
+      Claude Code reports them only to its status line, so connecting sets
+      <code>statusLine</code> in <code>~/.claude/settings.json</code> to a small script in Agenda.
+      Any status line you already have keeps showing, and Disconnect puts your setting back.
+      Needs a Claude Pro or Max sign-in. No network requests.</p>
+  </div>
   <div class="settings-group" style="margin-top:20px">
     <label>Board rows</label>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -7736,8 +7746,9 @@ function fmtUsd(micros) {
   return '$' + usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Labels for any source the ledger holds (older data may include Cursor).
 const USAGE_SOURCE_LABELS = { claude_code: 'Claude Code', cursor: 'Cursor' };
-const USAGE_KNOWN_SOURCES = ['claude_code', 'cursor'];
+const USAGE_KNOWN_SOURCES = ['claude_code'];
 
 function sourceLabel(src) { return USAGE_SOURCE_LABELS[src] || src; }
 
@@ -7793,7 +7804,7 @@ function renderUsageBadge(projectId) {
     : `${fmtShare(u.share_bp)} AI`;
   const breakdown = USAGE_KNOWN_SOURCES.map(src => {
     const v = u.by_source[src];
-    return `${sourceLabel(src)}: ${v ? fmtShare(v.share_bp) : (src === 'cursor' ? 'not tracked yet' : '0%')}`;
+    return `${sourceLabel(src)}: ${v ? fmtShare(v.share_bp) : '0%'}`;
   }).join('\n');
   return el('button', {
     class: 'card-usage',
@@ -7908,8 +7919,7 @@ async function renderUsagePanel() {
   nodes.push(el('div', { class: 'usage-basis' }, [
     'By tool: ' + USAGE_KNOWN_SOURCES
       .concat(Object.keys(srcTotals).filter(s => !USAGE_KNOWN_SOURCES.includes(s)))
-      .map(src => `${sourceLabel(src)} ${srcTotals[src] ? fmtShare(srcTotals[src].share_bp)
-        : (src === 'cursor' ? 'not tracked yet' : '0%')}`)
+      .map(src => `${sourceLabel(src)} ${srcTotals[src] ? fmtShare(srcTotals[src].share_bp) : '0%'}`)
       .join(' · '),
   ]));
   nodes.push(el('div', { class: 'usage-basis' }, [
@@ -8215,10 +8225,62 @@ async function showTodoUsage(todoId) {
 refreshUsageBadges();
 setInterval(refreshUsageBadges, 15 * 60 * 1000);
 
+// ---- Settings: connect Claude Code's status line -----------------------------
+
+(function initClaudeLimitsSetting() {
+  const status = document.getElementById('setting-claude-limits-status');
+  const actions = document.getElementById('setting-claude-limits-actions');
+  if (!status || !actions) return;
+  const button = (label, action, primary) => el('button', {
+    class: `rows-btn small${primary ? ' primary' : ' ghost'}`, type: 'button',
+    onclick: () => change(action),
+  }, [label]);
+  function show(s) {
+    const lastReading = s.last_reading_at
+      ? `Last reading ${fmtAge(Date.now() / 1000 - s.last_reading_at)}.`
+      : 'The dials appear after your next Claude Code reply.';
+    const keeps = s.keeps_previous ? ' Your own status line still shows.' : '';
+    const text = {
+      not_installed: "Claude Code isn't set up on this Mac.",
+      not_connected: 'Not connected.',
+      other: 'Not connected. Your current Claude Code status line keeps showing after you connect.',
+      connected: `Connected. ${lastReading}${keeps}`,
+      moved: 'Claude Code reports to a different copy of Agenda.',
+      broken: 'Claude Code points at an Agenda install that no longer exists.',
+      error: s.error || "Couldn't read Claude Code's settings.",
+    }[s.state] || '';
+    status.textContent = text;
+    const btns = {
+      not_connected: [button('Connect Claude Code', 'connect', true)],
+      other: [button('Connect Claude Code', 'connect', true)],
+      connected: [button('Disconnect', 'disconnect')],
+      moved: [button('Use this copy', 'connect', true), button('Disconnect', 'disconnect')],
+      broken: [button('Reconnect', 'connect', true), button('Disconnect', 'disconnect')],
+    }[s.state] || [];
+    actions.replaceChildren(...btns);
+  }
+  async function sync() {
+    try { show(await api('GET', '/api/quota/claude-setup')); }
+    catch { status.textContent = 'Claude Code status is unavailable.'; actions.replaceChildren(); }
+  }
+  async function change(action) {
+    actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      show(await api('POST', '/api/quota/claude-setup', { action }));
+      refreshPace();
+    } catch (err) {
+      toast(String(err.message || err).replace(/^.*-> \d+: /, ''));
+    } finally {
+      sync();
+    }
+  }
+  document.getElementById('settings-btn')?.addEventListener('click', sync);
+  sync();
+})();
+
 // ---------------------------------------------------------------------------
 // Usage-limit pace gauge: quota used (inner thick arc) vs. window time
-// elapsed (outer thin arc) for each allowance window (Claude 5h + weekly,
-// Cursor's two monthly billing-cycle allowances).
+// elapsed (outer thin arc) for each allowance window (Claude 5h + weekly).
 // Data comes from /api/quota; time, countdown, and pace advance locally.
 // ---------------------------------------------------------------------------
 
@@ -8311,7 +8373,7 @@ function paceAt(w, nowSec, cfg) {
   return { ...w, elapsed_pct: elapsed, target_pct_now: targetNow, pace_delta: delta, pace, age_seconds: age };
 }
 
-/** Outer-ring segment count: 5h / 7d / days in the billing window. */
+/** Outer-ring segment count: 5h / 7d / days for any longer window. */
 function paceOuterSegments(w) {
   if (w.window === 'five_hour') return 5;
   if (w.window === 'seven_day') return 7;
@@ -8414,8 +8476,8 @@ function paceCell(w, size) {
       cell.appendChild(el('div', { class: 'pace-detail' }, [
         w.status === 'inactive'
           ? `No active window${w.last_reset_at ? ` since ${fmtClock(w.last_reset_at, true)}` : ''}.` +
-            (w.provider === 'claude' ? ' A new one starts with your next Claude request.' : ' Waiting for the next billing-cycle reading.')
-          : `No reading yet. It appears after ${w.provider === 'claude' ? 'Claude Code' : w.provider_label} reports usage.`,
+            ' A new one starts with your next Claude request.'
+          : 'No reading yet. It appears after Claude Code reports usage.',
       ]));
     }
     return cell;

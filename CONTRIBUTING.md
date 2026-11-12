@@ -12,9 +12,8 @@ and the few rules that keep the project healthy.
 - **Local-first and private by design.** Agenda keeps user data on the user's
   Mac. New features must not send board content, notes, or paths over the
   network, and must not add analytics or third-party model calls. If a
-  feature needs a network request (like the Cursor usage poll), document
-  exactly what is sent and where, and make it a no-op when the tool isn't in
-  use.
+  feature needs a network request, document exactly what is sent and where,
+  and make it a no-op when the tool isn't in use.
 - **The database is user data.** Schema changes go in `db.py` as additive,
   idempotent migrations. Never drop or rewrite columns that existing
   installs depend on.

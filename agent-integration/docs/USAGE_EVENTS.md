@@ -145,22 +145,23 @@ It remembers how far it has read in
 Agenda's API listens only on the local machine, so a remote collector needs
 a forwarding method you trust, such as an SSH tunnel.
 
-## Usage-limit pacing (Claude and Cursor)
+## Usage-limit pacing (Claude)
 
 Separately from token accounting, Agenda can show how fast you are using
-your subscription limits: Claude's 5-hour and weekly windows, Cursor's
-monthly billing-cycle allowances, or both. Each provider's dials appear only
-once that provider has reported usage, so you see whichever tools you use
-and have connected. A gauge in the bottom-right
+your Claude subscription's 5-hour and weekly limits. The dials appear once
+Claude Code has reported usage. A gauge in the bottom-right
 corner compares the share of the limit used (thick inner arc) with the share
 of the window's time elapsed (thin outer arc, with a tick at the on-pace
 point). Within ±5 points of the time elapsed you are on pace; more is over
 pace, less is under.
 
 The data comes from Claude Code's status line, which reports
-`rate_limits.five_hour` and `rate_limits.seven_day`. Point Claude Code's
-`statusLine` at the bridge bundled with Agenda in `~/.claude/settings.json`
-(adjust the path if Agenda is installed elsewhere):
+`rate_limits.five_hour` and `rate_limits.seven_day` (only when Claude Code is
+signed in with a Claude Pro or Max subscription; API-key use has no such
+limits). To connect, open **Settings → Claude usage limits** and click
+**Connect Claude Code**. Agenda then sets `statusLine` in
+`~/.claude/settings.json` to the bridge inside the installed app and changes
+nothing else in that file:
 
 ```json
 "statusLine": {
@@ -169,33 +170,35 @@ The data comes from Claude Code's status line, which reports
 }
 ```
 
-Keep `-B`. Without it, Python writes bytecode caches into the signed app
-bundle each time the status line runs, which breaks the app's code signature
-(`codesign --verify` then reports "a sealed resource is missing or invalid").
+- **Your own status line is kept.** If you already had one, Agenda saves that
+  setting in its data folder (`claude_statusline_previous.json`, plus a copy
+  of the whole file as `claude-settings-before-agenda.json`). The bridge runs
+  your command with the same input and prints its output, so what you see in
+  Claude Code doesn't change. **Disconnect** puts your setting back exactly.
+- **Moving the app.** If the app moves or is reinstalled somewhere else,
+  Agenda repoints the status line at the new copy the next time it starts.
+  Settings also offers **Use this copy** when another copy of Agenda is
+  connected.
+- **Invalid settings are left alone.** If `settings.json` isn't valid JSON,
+  Agenda changes nothing and says so in Settings.
 
-The bridge prints a short status line (for example `Opus · 5h 42%▼ · 7d 71%▲`)
-and writes a snapshot under Agenda's data folder. It makes no network calls
-and reads no credentials. Claude Code only reports limits after a response,
-so readings age while Claude Code is idle; the gauge shows each reading's
-age and marks it stale. A window whose reset time has passed is shown as
-inactive until Claude Code reports a new one.
+The command keeps `-B`. Without it, Python writes bytecode caches into the
+signed app bundle each time the status line runs, which breaks the app's code
+signature (`codesign --verify` then reports "a sealed resource is missing or
+invalid"). Configure it by hand only if you need to, and keep `-I -B`.
 
-### Cursor
-
-Cursor has no status line, so Agenda polls the usage summary behind
-cursor.com's Spending page every 10 minutes. Nothing needs configuring: if
-the Cursor desktop app is installed and signed in, Agenda reads Cursor's
-session token from Cursor's local state database (read-only) on each poll,
-sends it only to `cursor.com`, and keeps it in memory. It never logs or
-stores the token. If Cursor isn't installed or signed in, nothing is fetched
-and no Cursor dials appear. This poll is the only network request the usage
-features make.
-
-The endpoint is undocumented. If Cursor changes or rejects it, Agenda writes
-nothing, and the Cursor dials go stale rather than showing wrong numbers.
+Without a status line of your own, the bridge prints a short one (for example
+`Opus · 5h 42%▼ · 7d 71%▲`). Either way it writes a snapshot under Agenda's
+data folder. It makes no network calls and reads no credentials. Claude Code
+only reports limits after a response, so readings age while Claude Code is
+idle; the gauge shows each reading's age and marks it stale. A window whose
+reset time has passed is shown as inactive until Claude Code reports a new
+one.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/quota` | Each window's used %, reset time, elapsed %, pace, freshness, projection |
 | `PATCH` | `/api/quota/config` | `target_pct` (share of the limit to aim to use, default 100) and `tolerance_pp` (default 5) |
 | `GET` | `/api/quota/history?provider=claude&window=five_hour&hours=24` | Raw observations |
+| `GET` | `/api/quota/claude-setup` | Whether Claude Code's status line is connected (`state`: `not_installed`, `not_connected`, `other`, `connected`, `moved`, `broken`, `error`) |
+| `POST` | `/api/quota/claude-setup` | `{"action": "connect"}` or `{"action": "disconnect"}` |
