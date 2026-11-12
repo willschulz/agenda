@@ -7,12 +7,11 @@ from the per-project token ledger (usage_ledger.py): quotas are account-wide
 percentages reported by the provider, not local token counts.
 
 Provider-independent model: one row per observation of (provider, window).
-Observations arrive as snapshot files in the spool folder. Claude's are
-written by usage_statusline.py. Cursor's must be written by a separate
-fetcher as cursor_<source>.json; Cursor has no status line to tap.
+Observations arrive as snapshot files in the spool folder, written by
+Claude Code's status line through usage_statusline.py.
 
-Fixed windows (Claude 5h/7d) start at resets_at minus their length. Billing-
-cycle windows (Cursor) vary in length, so their snapshots carry starts_at.
+Fixed windows (Claude 5h/7d) start at resets_at minus their length. A
+snapshot may instead carry starts_at for windows of varying length.
 
 Merge rules:
 - A window is identified by its reset time. Within one allowance generation
@@ -52,18 +51,9 @@ WINDOWS: dict[tuple[str, str], dict[str, Any]] = {
         "label": "Weekly", "short": "Week", "seconds": 7 * 86400,
         "stale_after": 2 * 3600, "trend_lookback": 24 * 3600, "min_trend": 6 * 3600,
     },
-    # Cursor Pro+ monthly billing cycle: two separate allowances.
-    ("cursor", "cursor_models"): {
-        "label": "Cursor models", "short": "Cursor", "seconds": 30 * 86400,
-        "stale_after": 3 * 3600, "trend_lookback": 3 * 86400, "min_trend": 12 * 3600,
-    },
-    ("cursor", "other_models"): {
-        "label": "Other models", "short": "Other", "seconds": 30 * 86400,
-        "stale_after": 3 * 3600, "trend_lookback": 3 * 86400, "min_trend": 12 * 3600,
-    },
 }
-PROVIDER_LABELS = {"claude": "Claude", "cursor": "Cursor"}
-SPOOL_PATTERNS = ("claude_statusline-*.json", "cursor_*.json")
+PROVIDER_LABELS = {"claude": "Claude"}
+SPOOL_PATTERNS = ("claude_statusline-*.json",)
 RESET_TOLERANCE = 120  # seconds: reset times reported for one window may jitter
 SPOOL_RETENTION = 8 * 86400
 # Same-session used-% drop that marks a mid-window allowance resize (upgrade).

@@ -211,47 +211,24 @@ class PacingTests(unittest.TestCase):
             self.assertEqual(usage_quota.ingest_spool(self.conn, folder, now=NOW), 0)
 
 
-def _cursor_snap(cursor_used, other_used, starts_at, resets_at, seen_at):
-    windows = {name: {"used_percentage": used, "starts_at": starts_at, "resets_at": resets_at}
-               for name, used in (("cursor_models", cursor_used), ("other_models", other_used))
-               if used is not None}
-    return {"provider": "cursor", "source": "cursor_dashboard", "windows": windows,
-            "changed_at": seen_at, "seen_at": seen_at}
+class RetiredProviderTests(unittest.TestCase):
+    """Cursor dials were removed; leftover Cursor data must stay invisible."""
 
-
-class CursorWindowTests(unittest.TestCase):
     def setUp(self):
         self.conn = _conn()
 
-    def _state(self, now=NOW):
-        return {w["window"]: w for w in usage_quota.state(self.conn, now=now)["providers"]["cursor"]}
-
-    def test_billing_cycle_uses_reported_start_not_nominal_length(self):
-        # A 31-day cycle, 15.5 days in: half elapsed, though the nominal length is 30 days.
-        start, reset = int(NOW - 15.5 * 86400), int(NOW + 15.5 * 86400)
-        usage_quota.ingest_snapshot(self.conn, _cursor_snap(3, 0, start, reset, NOW - 60))
-        w = self._state()
-        self.assertEqual(w["cursor_models"]["window_seconds"], 31 * 86400)
-        self.assertEqual(w["cursor_models"]["elapsed_pct"], 50.0)
-        self.assertEqual((w["cursor_models"]["used_pct"], w["cursor_models"]["pace"]), (3.0, "under"))
-        self.assertEqual(w["other_models"]["used_pct"], 0.0)
-        self.assertEqual(w["cursor_models"]["provider_label"], "Cursor")
-
-    def test_missing_cursor_window_stays_unavailable(self):
-        usage_quota.ingest_snapshot(self.conn, _cursor_snap(3, None, int(NOW - 86400), int(NOW + 86400), NOW))
-        self.assertEqual(self._state()["other_models"]["status"], "unavailable")
-
-    def test_claude_windows_unaffected_and_cursor_hidden_until_reported(self):
+    def test_only_claude_is_reported(self):
         usage_quota.ingest_snapshot(self.conn, _snap("s", _five(10, int(NOW + H)), NOW - 60))
-        providers = usage_quota.state(self.conn, now=NOW)["providers"]
-        self.assertEqual(providers["claude"][0]["window_seconds"], 5 * H)
-        self.assertTrue(all(w["status"] == "unavailable" for w in providers["cursor"]))
+        self.assertEqual(list(usage_quota.state(self.conn, now=NOW)["providers"]), ["claude"])
 
-    def test_spool_picks_up_cursor_files(self):
+    def test_cursor_snapshots_and_spool_files_are_ignored(self):
+        snap = {"provider": "cursor", "source": "cursor_dashboard", "changed_at": NOW, "seen_at": NOW,
+                "windows": {"cursor_models": {"used_percentage": 3, "resets_at": int(NOW + 86400)}}}
+        self.assertEqual(usage_quota.ingest_snapshot(self.conn, snap), 0)
         with tempfile.TemporaryDirectory() as folder:
             with open(os.path.join(folder, "cursor_dashboard.json"), "w") as fh:
-                json.dump(_cursor_snap(3, 0, int(NOW - 86400), int(NOW + 86400), NOW - 60), fh)
-            self.assertEqual(usage_quota.ingest_spool(self.conn, folder, now=NOW), 2)
+                json.dump(snap, fh)
+            self.assertEqual(usage_quota.ingest_spool(self.conn, folder, now=NOW), 0)
 
     def test_schema_migration_adds_starts_at(self):
         conn = sqlite3.connect(":memory:", isolation_level=None)

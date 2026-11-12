@@ -6,12 +6,11 @@ stdin. The bridge keeps only `rate_limits` (5-hour and 7-day subscription
 windows), writes a timestamped snapshot for Agenda, and prints a one-line
 status. It makes no network calls, so it can never slow Claude Code down.
 
-Configure in ~/.claude/settings.json:
-
-    "statusLine": {
-      "type": "command",
-      "command": "<Agenda.app>/Contents/Resources/python/bin/python3 -I -B <Agenda.app>/Contents/Resources/server/usage_statusline.py"
-    }
+Set up from Agenda's Settings ("Connect Claude Code"), which writes the
+`statusLine` entry in ~/.claude/settings.json (claude_statusline_setup.py).
+If the user already had a status line, the bridge runs that command with the
+same input and prints its output instead of its own, so connecting Agenda
+never takes it away.
 
 Snapshots: <Agenda data dir>/quota/claude_statusline-<session>.json, one per
 session so concurrent sessions never overwrite each other. Missing windows
@@ -23,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -31,12 +31,35 @@ WINDOWS = ("five_hour", "seven_day")
 LABELS = {"five_hour": "5h", "seven_day": "7d"}
 DURATIONS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
 HEARTBEAT_SECONDS = 30  # rewrite unchanged data at most this often
+DEFAULT_DATA_DIR = os.path.expanduser("~/Library/Application Support/Agenda")
+# The user's own statusLine setting from before Agenda connected, if any.
+PREVIOUS_FILE = "claude_statusline_previous.json"
+PREVIOUS_TIMEOUT = 5  # seconds; Claude Code cancels slow status lines anyway
 
 
 def data_dir() -> str:
-    return os.environ.get("AGENDA_DATA_DIR") or os.path.expanduser(
-        "~/Library/Application Support/Agenda"
-    )
+    return os.environ.get("AGENDA_DATA_DIR") or DEFAULT_DATA_DIR
+
+
+def previous_command() -> str:
+    try:
+        with open(os.path.join(data_dir(), PREVIOUS_FILE), encoding="utf-8") as fh:
+            prev = (json.load(fh) or {}).get("statusLine") or {}
+    except (OSError, ValueError, AttributeError):
+        return ""
+    cmd = prev.get("command") if isinstance(prev, dict) else None
+    # Never call ourselves.
+    return cmd if isinstance(cmd, str) and "usage_statusline.py" not in cmd else ""
+
+
+def run_previous(command: str, raw: str) -> str | None:
+    """The user's own status line output, or None if it failed."""
+    try:
+        done = subprocess.run(command, shell=True, input=raw, capture_output=True,
+                              text=True, timeout=PREVIOUS_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.rstrip("\n") if done.returncode == 0 else None
 
 
 def extract(payload: dict) -> dict:
@@ -106,19 +129,23 @@ def render(payload: dict, windows: dict, now: float) -> str:
 
 def main() -> int:
     now = time.time()
+    raw = sys.stdin.read()
     try:
-        payload = json.load(sys.stdin)
+        payload = json.loads(raw)
     except ValueError:
-        return 0
-    if not isinstance(payload, dict):
-        return 0
-    windows = extract(payload)
+        payload = None
+    windows = extract(payload) if isinstance(payload, dict) else {}
     if windows:
         try:
             write_snapshot(str(payload.get("session_id") or ""), windows, now)
         except OSError:
             pass  # the status line must still render
-    print(render(payload, windows, now))
+    previous = previous_command()
+    line = run_previous(previous, raw) if previous else None
+    if line is None and isinstance(payload, dict):
+        line = render(payload, windows, now)
+    if line:
+        print(line)
     return 0
 
 

@@ -79,8 +79,8 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
   together, so more of it fits on screen. The header stays
   full size, a small pill shows the level (click it to reset), and each
   device remembers its zoom.
-- **Usage-limit pace dials**: optional gauges for Claude and/or Cursor
-  subscription limits (see [AI and usage tracking](#ai-and-usage-tracking)).
+- **Usage-limit pace dials**: optional gauges for your Claude subscription
+  limits (see [AI and usage tracking](#ai-and-usage-tracking)).
 
 ## Getting started (development)
 
@@ -278,6 +278,7 @@ stay on the Mac and are never synced.
 | `GET` | `/api/quota` | Usage-limit windows with pace |
 | `PATCH` | `/api/quota/config` | Pace target and tolerance |
 | `GET` | `/api/quota/history` | Raw usage-limit observations |
+| `GET`/`POST` | `/api/quota/claude-setup` | Connect or disconnect Claude Code's status line |
 
 [`agent-integration/docs/API.md`](agent-integration/docs/API.md) is the
 agent-facing reference.
@@ -306,17 +307,13 @@ calls.
   [open event format](agent-integration/docs/USAGE_EVENTS.md) from any other
   tool. It stores no prompt text. Costs are API-equivalent estimates from
   `pricing.json`, which you can override per install.
-- **Usage-limit pace dials** show how fast you're using your subscription
-  limits, for whichever tools you use:
-  - **Claude**: point Claude Code's `statusLine` at the bundled
-    `usage_statusline.py` bridge. The bridge makes no network calls.
-  - **Cursor**: automatic when the Cursor desktop app is installed and signed
-    in. Agenda reads Cursor's local session token (read-only, held in memory
-    only) and polls `cursor.com`'s usage summary every 10 minutes.
-
-  A provider's dials appear only after it has reported data. Setup and the
-  exact privacy behavior are in
-  [`USAGE_EVENTS.md`](agent-integration/docs/USAGE_EVENTS.md#usage-limit-pacing-claude-and-cursor).
+- **Usage-limit pace dials** show how fast you're using your Claude 5-hour
+  and weekly limits. Turn them on in **Settings → Claude usage limits →
+  Connect Claude Code**, which points Claude Code's status line at the bundled
+  `usage_statusline.py` bridge. The bridge makes no network calls, and a
+  status line you already had keeps showing. The dials appear after Claude
+  Code next reports usage. Details are in
+  [`USAGE_EVENTS.md`](agent-integration/docs/USAGE_EVENTS.md#usage-limit-pacing-claude).
 
 ## Agent integration
 

@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 import board_order
+import claude_statusline_setup
 import db
 import insights as native_insights
 import sync_recovery
@@ -38,7 +39,6 @@ import sync_tombstones
 import todo_structure
 import usage_collect
 import usage_ledger
-import usage_cursor
 import usage_quota
 
 LOCAL_AI_HELPER = os.environ.get("AGENDA_LOCAL_AI_HELPER", "").strip()
@@ -517,19 +517,6 @@ async def _run_quota_ingest_loop() -> None:
         await asyncio.sleep(30)
 
 
-async def _run_cursor_quota_loop() -> None:
-    """Poll Cursor's usage-limit percentages every 10 minutes."""
-    await asyncio.sleep(10)
-    while True:
-        try:
-            status = await asyncio.to_thread(usage_cursor.poll_once)
-            if status == "ok":
-                await asyncio.to_thread(usage_quota.ingest_spool)
-        except Exception:
-            log.exception("Cursor usage poll failed")
-        await asyncio.sleep(usage_cursor.POLL_SECONDS)
-
-
 async def _run_usage_scan_loop() -> None:
     """Scan local AI tool logs periodically while the user has opted in."""
     await asyncio.sleep(30)
@@ -746,7 +733,11 @@ async def lifespan(app: FastAPI):
     backup_task = asyncio.create_task(_run_backup_loop())
     usage_task = asyncio.create_task(_run_usage_scan_loop())
     quota_task = asyncio.create_task(_run_quota_ingest_loop())
-    cursor_task = asyncio.create_task(_run_cursor_quota_loop())
+    try:
+        if await asyncio.to_thread(claude_statusline_setup.repair_if_broken):
+            log.info("Claude Code status line repointed at this Agenda install")
+    except Exception:
+        log.exception("Claude Code status line check failed")
     conn = db.get_conn()
     now = _now()
     abandoned_titles = conn.execute(
@@ -778,7 +769,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        for task in (backup_task, usage_task, quota_task, cursor_task):
+        for task in (backup_task, usage_task, quota_task):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
@@ -2312,6 +2303,26 @@ async def quota_state():
 @app.patch("/api/quota/config")
 async def patch_quota_config(payload: QuotaConfigUpdate):
     return usage_quota.patch_config(payload.model_dump(exclude_none=True))
+
+
+class ClaudeStatusLineAction(BaseModel):
+    action: str = Field(..., pattern=r"^(connect|disconnect)$")
+
+
+@app.get("/api/quota/claude-setup")
+async def claude_setup_status():
+    """Whether Claude Code's status line feeds Agenda's usage-limit dials."""
+    return await asyncio.to_thread(claude_statusline_setup.status)
+
+
+@app.post("/api/quota/claude-setup")
+async def claude_setup_change(payload: ClaudeStatusLineAction):
+    """Connect or disconnect Claude Code's status line (~/.claude/settings.json)."""
+    fn = claude_statusline_setup.connect if payload.action == "connect" else claude_statusline_setup.disconnect
+    try:
+        return await asyncio.to_thread(fn)
+    except claude_statusline_setup.SetupError as e:
+        raise HTTPException(409, str(e)) from e
 
 
 @app.get("/api/quota/history")

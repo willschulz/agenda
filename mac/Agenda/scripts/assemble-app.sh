@@ -71,13 +71,12 @@ cp -R "$PYTHON_SRC" "$DEST/Contents/Resources/python"
 cp -R "$SPARKLE_SRC" "$DEST/Contents/Frameworks/Sparkle.framework"
 mkdir -p "$DEST/Contents/Resources/server"
 cp "$REPO_DIR/main.py" "$REPO_DIR/db.py" "$REPO_DIR/seed.py" \
-   "$REPO_DIR/board_order.py" \
+   "$REPO_DIR/board_order.py" "$REPO_DIR/claude_statusline_setup.py" \
    "$REPO_DIR/insights.py" "$REPO_DIR/sync_tombstones.py" \
    "$REPO_DIR/sync_recovery.py" "$REPO_DIR/sync_contract.py" \
    "$REPO_DIR/todo_structure.py" \
    "$REPO_DIR/usage_collect.py" "$REPO_DIR/usage_ledger.py" \
    "$REPO_DIR/usage_quota.py" "$REPO_DIR/usage_statusline.py" \
-   "$REPO_DIR/usage_cursor.py" \
    "$REPO_DIR/pricing.json" \
    "$DEST/Contents/Resources/server/"
 cp -R "$REPO_DIR/static" "$DEST/Contents/Resources/server/static"
