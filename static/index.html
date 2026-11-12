@@ -3919,6 +3919,7 @@ function render() {
 
   const sections = CATEGORY_ORDER.map(cat => renderRow(cat, state.projects[cat] || []));
   root.replaceChildren(...sections);
+  sweepDetachedSortables();
 
   function applyScrollSnapshot() {
     window.scrollTo(winSX, winSY);
@@ -4329,6 +4330,7 @@ function renderCompletedView() {
   }
 
   root.replaceChildren(...sections);
+  sweepDetachedSortables();
 }
 
 /**
@@ -4701,13 +4703,44 @@ async function persistDrag(card) {
   return persistDragMulti([card]);
 }
 
+/*
+ * SortableJS keeps every instance's element in a module-level list until
+ * .destroy() is called. render() rebuilds the board from scratch on every
+ * change, so without cleanup each re-render left the previous board's DOM
+ * (and the todo data its handlers close over) reachable forever. Over days of
+ * live updates this grew the page to several GB.
+ *
+ * Every Sortable goes through createSortable(), which tracks it. Both board
+ * renders call sweepDetachedSortables() right after swapping the new board
+ * in, destroying instances whose element has left the document. Only sweep
+ * once the new board is attached: during a build its fresh, not-yet-inserted
+ * containers also look detached. Never sweep mid-drag: destroy() resets
+ * Sortable's shared drag state (anything skipped is caught next render).
+ */
+const _liveSortables = new Set();
+
+function sweepDetachedSortables() {
+  if (typeof Sortable === 'undefined' || Sortable.active || Sortable.dragged) return;
+  for (const inst of _liveSortables) {
+    if (inst.el && inst.el.isConnected) continue;
+    _liveSortables.delete(inst);
+    if (inst.el) inst.destroy();
+  }
+}
+
+function createSortable(container, options) {
+  const inst = Sortable.create(container, options);
+  _liveSortables.add(inst);
+  return inst;
+}
+
 /**
  * Initialize SortableJS on a .row-track so project cards can be dragged
  * between category rows. Only PATCHes category when the card moves to a
  * different row (evt.from !== evt.to).
  */
 function initProjectSortable(track) {
-  Sortable.create(track, {
+  createSortable(track, {
     group: 'projects',
     animation: 150,
     handle: '.card-grip',
@@ -4890,7 +4923,7 @@ function commitExistingItemMove(draggedRow, target) {
  * commitExistingItemMove, so the UX matches the Add-todo creation DnD exactly.
  */
 function initSortable(container, group, card) {
-  Sortable.create(container, {
+  createSortable(container, {
     group,
     animation: 0,
     handle: '.todo-check',
@@ -8932,7 +8965,7 @@ function updateRowsFooterState() {
 function initMiniBoardSortable() {
   const board = document.getElementById('mini-board');
   if (!board || typeof Sortable === 'undefined') return;
-  Sortable.create(board, {
+  createSortable(board, {
     animation: 150,
     handle: '.mini-grip:not(.locked)',
     draggable: '.mini-row:not(.locked-row):not(.is-deleted)',
