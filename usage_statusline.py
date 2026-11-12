@@ -10,7 +10,7 @@ Configure in ~/.claude/settings.json:
 
     "statusLine": {
       "type": "command",
-      "command": "<Agenda.app>/Contents/Resources/python/bin/python3 -I <Agenda.app>/Contents/Resources/server/usage_statusline.py"
+      "command": "<Agenda.app>/Contents/Resources/python/bin/python3 -I -B <Agenda.app>/Contents/Resources/server/usage_statusline.py"
     }
 
 Snapshots: <Agenda data dir>/quota/claude_statusline-<session>.json, one per
