@@ -165,9 +165,13 @@ The data comes from Claude Code's status line, which reports
 ```json
 "statusLine": {
   "type": "command",
-  "command": "/Applications/Agenda.app/Contents/Resources/python/bin/python3 -I /Applications/Agenda.app/Contents/Resources/server/usage_statusline.py"
+  "command": "/Applications/Agenda.app/Contents/Resources/python/bin/python3 -I -B /Applications/Agenda.app/Contents/Resources/server/usage_statusline.py"
 }
 ```
+
+Keep `-B`. Without it, Python writes bytecode caches into the signed app
+bundle each time the status line runs, which breaks the app's code signature
+(`codesign --verify` then reports "a sealed resource is missing or invalid").
 
 The bridge prints a short status line (for example `Opus · 5h 42%▼ · 7d 71%▲`)
 and writes a snapshot under Agenda's data folder. It makes no network calls
