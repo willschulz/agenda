@@ -2449,6 +2449,7 @@
     width: 480px;
     max-width: calc(100vw - 32px);
     max-height: 80vh;
+    margin: auto;  /* the global reset removes the UA's dialog centering */
     background: var(--bg-elevated);
     color: var(--text);
     overflow: hidden;
@@ -2478,7 +2479,10 @@
   }
   .cv-modal-body {
     overflow-y: auto;
-    flex: 1;
+    /* Size to content and scroll past max-height. A zero flex-basis lets WebKit
+       collapse the list to its padding, leaving only the header visible. */
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 12px 0;
   }
   body.completed-mode #completed-history-modal {
