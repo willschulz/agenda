@@ -21,7 +21,11 @@ The portable workflow keeps ownership boundaries explicit:
 - Humans own `in_progress`; agents never change it.
 - Agents set `running` only while actively working and clear it at closeout.
 - Agents read project goals and recent lab notes before acting.
-- Changes and completion remain approval-gated.
+- Work requested without a todo is tracked too: agents reuse or extend an
+  existing todo, create a short one only when nothing fits, and ask when
+  that's unclear.
+- Changes and completion remain approval-gated, except completing a todo the
+  agent created for a request once the work is verified.
 - Unreviewed agent-built work is handed back through a needs-review todo.
 - Follow-up relationships are expressed through hierarchy and order.
 - `for_later` is human-owned parking; agents require explicit per-item

@@ -5,7 +5,14 @@ alwaysApply: true
 # Agenda todo closeout
 
 Apply this after materially advancing or completing a tracked Agenda todo, or
-when handing the work to another session.
+when handing the work to another session. This includes todos the agent
+found or created for work the user requested without naming a todo.
+
+**Todos the agent created for a direct request.** Completing one needs no
+separate approval once the requested deliverable is done and verified and
+nothing is left that needs the user's judgment. Write the lab note, complete
+the todo, and say so in one line. Otherwise leave it open with a lab note.
+The five-bucket proposal is only needed when it has something in it.
 
 ## 1. Write one concise lab note first
 
@@ -59,7 +66,8 @@ or move work into Later without explicit per-item approval.
 
 ## 3. Propose five buckets
 
-Present one consolidated, approval-gated proposal:
+Present one consolidated, approval-gated proposal (see the exception
+above for todos the agent created for a direct request):
 
 1. New follow-up todos, including placement and concise notes.
 2. Whether the current todo should be completed.
