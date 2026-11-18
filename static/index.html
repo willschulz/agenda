@@ -3044,6 +3044,16 @@
       Deleting a row asks where its projects should go.</p>
   </div>
   <div class="settings-group" style="margin-top:20px">
+    <label>Order projects in each row</label>
+    <div class="theme-control" id="setting-board-sort">
+      <button type="button" data-board-sort-btn="activity">By activity</button>
+      <button type="button" data-board-sort-btn="manual">Manually</button>
+    </div>
+    <p class="settings-hint">By activity puts the projects you've worked on most recently
+      first: new, completed, and noted todos count, recent ones most. Manually keeps
+      the order you drag cards into. Applies to every row, Top of Mind included.</p>
+  </div>
+  <div class="settings-group" style="margin-top:20px">
     <label>Appearance</label>
     <div class="theme-control">
       <button data-theme-btn="light">Light</button>
@@ -3995,32 +4005,14 @@ function velocityColor(v, goal) {
   };
 }
 
-function sortProjects(projects) {
-  const withDeadline    = projects.filter(p => p.deadline);
-  const withoutDeadline = projects.filter(p => !p.deadline);
-
-  // Deadline group: ascending by due date; velocity descending within same-day ties.
-  withDeadline.sort((a, b) => {
-    if (a.deadline !== b.deadline) return a.deadline < b.deadline ? -1 : 1;
-    return projectVelocity(b.id) - projectVelocity(a.id);
-  });
-
-  // No-deadline group: descending velocity; stable fallback via display_order then id.
-  withoutDeadline.sort((a, b) => {
-    const vd = projectVelocity(b.id) - projectVelocity(a.id);
-    if (vd !== 0) return vd;
-    if (a.display_order !== b.display_order) return a.display_order - b.display_order;
-    return a.id - b.id;
-  });
-
-  return [...withDeadline, ...withoutDeadline];
+function boardSortMode() {
+  return state.boardSort === 'manual' ? 'manual' : 'activity';
 }
 
 function renderRow(category, projects) {
-  const filtered = projects.filter(p => !p.archived);
-  // top_of_mind uses manual display_order (no velocity badge shown there either);
-  // the API already returns projects ordered by display_order, id.
-  const visible = category === 'top_of_mind' ? filtered : sortProjects(filtered);
+  // The API returns every row already in board order (settings.board_sort:
+  // recent activity, or the manual drag order; see board_order.py).
+  const visible = projects.filter(p => !p.archived);
   const track = el('div', { class: 'row-track', dataset: { category } });
   for (const p of visible) track.appendChild(renderCard(p));
   track.appendChild(renderAddCard(category));
@@ -4749,14 +4741,24 @@ function createSortable(container, options) {
   return inst;
 }
 
+/** Card project ids of a row track, in on-screen order. */
+function trackProjectIds(track) {
+  return [...track.querySelectorAll(':scope > .card[data-project-id]')]
+    .map(c => Number(c.dataset.projectId))
+    .filter(Boolean);
+}
+
 /**
  * Initialize SortableJS on a .row-track so project cards can be dragged
- * between category rows. Only PATCHes category when the card moves to a
- * different row (evt.from !== evt.to).
+ * between category rows. A move to another row PATCHes the category. In
+ * manual board order, cards can also be rearranged within a row and the
+ * destination row's order is saved; in activity order the row re-sorts.
  */
 function initProjectSortable(track) {
+  const manual = boardSortMode() === 'manual';
   createSortable(track, {
     group: 'projects',
+    sort: manual,
     animation: 150,
     handle: '.card-grip',
     draggable: '.card:not(.add-card)',
@@ -4764,12 +4766,19 @@ function initProjectSortable(track) {
     chosenClass: 'sortable-card-chosen',
     fallbackOnBody: true,
     async onEnd(evt) {
-      if (evt.from === evt.to) return;
+      const moved = evt.from !== evt.to;
+      if (!moved && (!manual || evt.oldIndex === evt.newIndex)) return;
       const projectId = Number(evt.item.dataset.projectId);
       const newCategory = evt.to.dataset.category;
       if (!newCategory || !projectId) return;
       try {
-        await api('PATCH', `/api/projects/${projectId}`, { category: newCategory });
+        if (moved) await api('PATCH', `/api/projects/${projectId}`, { category: newCategory });
+        if (manual) {
+          await api('POST', '/api/projects/reorder', {
+            category: newCategory,
+            project_ids: trackProjectIds(evt.to),
+          });
+        }
         await reload();
       } catch (err) {
         toast(err.message);
@@ -7109,6 +7118,7 @@ async function _reloadOnce() {
         .catch(() => ({ insights: [], provider: 'deterministic', needs_refresh: true })),
     ]);
     applyRowDefinitions(data.rows);
+    state.boardSort = data.board_sort === 'manual' ? 'manual' : 'activity';
     // Separate archived projects from active ones so velocity/effort/search stay unaffected.
     const raw = data.projects || {};
     const grouped = {};
@@ -7633,6 +7643,24 @@ function scrollToCompletedTodo(todo, project) {
     await reload();
   });
   const themeBtns   = document.querySelectorAll('[data-theme-btn]');
+  const boardSortBtns = document.querySelectorAll('[data-board-sort-btn]');
+  function applyBoardSortButtons() {
+    const mode = boardSortMode();
+    boardSortBtns.forEach(b => b.classList.toggle('active', b.dataset.boardSortBtn === mode));
+  }
+  boardSortBtns.forEach(b => b.addEventListener('click', async () => {
+    const mode = b.dataset.boardSortBtn;
+    if (mode === boardSortMode()) return;
+    try {
+      _serverSettings = await api('PATCH', '/api/settings', { board_sort: mode });
+    } catch (err) {
+      toast(`Couldn't change project order: ${err.message}`);
+      return;
+    }
+    state.boardSort = mode;
+    applyBoardSortButtons();
+    await reload();
+  }));
 
   function applyTheme(theme) {
     if (theme === 'light' || theme === 'dark') {
@@ -7652,6 +7680,7 @@ function scrollToCompletedTodo(todo, project) {
     ipLimitInput.value = s.ip_effort_limit;
     applyTheme(s.theme); // sync button highlights to current saved state
     applyPointsLabels();
+    applyBoardSortButtons();
     pane.classList.remove('hidden');
     backdrop.classList.remove('hidden');
   }
@@ -7721,6 +7750,7 @@ function scrollToCompletedTodo(todo, project) {
     retireInput.value  = s.retire_hours;
     ipLimitInput.value = s.ip_effort_limit;
     applyPointsLabels();
+    applyBoardSortButtons();
   };
 
   // Apply saved theme on boot; seed inputs in case pane is opened before change fires.

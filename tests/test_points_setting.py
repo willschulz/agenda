@@ -66,23 +66,13 @@ class PointsSettingTests(unittest.TestCase):
         db.patch_settings({"points_enabled": True})
         self.assertEqual(self.stats_total()[0], 7.25)
 
-    def test_board_order_velocity_and_payload_follow_the_setting(self):
-        other = self.conn.execute(
-            "INSERT INTO projects (name, category, created_at, updated_at, stable_uuid) "
-            "VALUES ('Q', 'in_development', 'x', 'x', 'uuid-q')").lastrowid
-        stamp = datetime.now(timezone.utc).isoformat()
-        for _ in range(4):   # four unpointed tasks: 1.0 with points on, 4.0 with them off
-            self.conn.execute(
-                "INSERT INTO todos (project_id, text, completed, completed_at, "
-                "created_at, updated_at) VALUES (?, 't', 1, ?, ?, ?)",
-                (other, stamp, stamp, stamp))
-        on = board_order.build_board_order(self.conn)["in_development"]
-        self.assertEqual(on[0], "uuid-p")     # 7.25 beats 1.0
+    def test_board_order_payload_carries_the_setting(self):
+        # Row order no longer depends on points (see test_board_order.py),
+        # but the iOS snapshot still tells clients whether to show them.
         db.patch_settings({"points_enabled": False})
-        off = board_order.build_board_order(self.conn)["in_development"]
-        self.assertEqual(off[0], "uuid-q")    # 4 tasks beat 3
         payload = asyncio.run(main.sync_board_order())
         self.assertIs(payload["points_enabled"], False)
+        self.assertEqual(payload["rows"]["in_development"], ["uuid-p"])
 
     def test_settings_api_round_trip(self):
         result = asyncio.run(main.patch_settings(main.SettingsUpdate(points_enabled=False)))
@@ -138,7 +128,7 @@ class NewBoardTests(unittest.TestCase):
         conn.execute("PRAGMA user_version = 1")
         db.init_schema()
         self.assertTrue(db.get_settings()["points_enabled"])
-        snaps = list((self.path.parent / "backups").glob("pre-migration-v1-to-v2-*.db"))
+        snaps = list((self.path.parent / "backups").glob(f"pre-migration-v1-to-v{db.SCHEMA_VERSION}-*.db"))
         self.assertEqual(len(snaps), 1)
 
 
