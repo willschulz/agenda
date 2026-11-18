@@ -23,7 +23,7 @@ import zlib
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -915,6 +915,8 @@ async def list_projects(
         todos_by_project.setdefault(r["project_id"], []).append(todo)
 
     computed_deadlines = _compute_project_deadlines(todos_by_project)
+    sort_mode = board_order.board_sort_mode(conn)
+    activity = board_order.project_activity(conn)
 
     rows = db.list_rows(conn)
     grouped: dict[str, list[dict]] = {r["key"]: [] for r in rows}
@@ -922,11 +924,18 @@ async def list_projects(
         proj = _project_to_dict(r)
         proj["todos"] = todos_by_project.get(proj["id"], [])
         proj["deadline"] = computed_deadlines.get(proj["id"])
+        proj["activity"] = activity.get(proj["id"], 0.0)
         grouped.setdefault(proj["category"], []).append(proj)
+    # Each row arrives in board order (settings.board_sort; see board_order.py).
+    grouped = {
+        key: board_order.order_projects(items, sort_mode, activity)
+        for key, items in grouped.items()
+    }
 
     return {
         "categories": [r["key"] for r in rows],
         "rows": [{"key": r["key"], "label": r["label"], "locked": r["locked"]} for r in rows],
+        "board_sort": sort_mode,
         "projects": grouped,
     }
 
@@ -1211,6 +1220,51 @@ async def create_project(payload: ProjectCreate):
     proj = _project_to_dict(row)
     proj["todos"] = []
     return proj
+
+
+class ProjectReorder(BaseModel):
+    category: str = Field(..., min_length=1, max_length=100)
+    project_ids: list[int] = Field(..., max_length=1000)
+
+
+@app.post("/api/projects/reorder")
+async def reorder_projects(payload: ProjectReorder):
+    """Set the manual order of one row: project_ids top/left first.
+
+    Only rewrites display_order where it changes, so an unchanged row sends
+    nothing to sync. Projects in the row but missing from the list keep their
+    relative order after the listed ones.
+    """
+    if len(set(payload.project_ids)) != len(payload.project_ids):
+        raise HTTPException(status_code=422, detail="duplicate project ids")
+    with db.transaction() as txn:
+        rows = txn.execute(
+            "SELECT id, display_order FROM projects "
+            "WHERE category = ? AND archived = 0 ORDER BY display_order, id",
+            (payload.category,),
+        ).fetchall()
+        current = {r["id"]: r["display_order"] for r in rows}
+        unknown = [pid for pid in payload.project_ids if pid not in current]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"not active projects in {payload.category}: {unknown}",
+            )
+        listed = set(payload.project_ids)
+        ordered = list(payload.project_ids) + [r["id"] for r in rows if r["id"] not in listed]
+        now = _now()
+        changed = 0
+        for index, pid in enumerate(ordered):
+            target = index * 10
+            if current[pid] != target:
+                txn.execute(
+                    "UPDATE projects SET display_order = ?, updated_at = ? WHERE id = ?",
+                    (target, now, pid),
+                )
+                changed += 1
+    if changed:
+        _notify_change()
+    return {"category": payload.category, "project_ids": ordered, "changed": changed}
 
 
 @app.patch("/api/projects/{project_id}")
@@ -1870,6 +1924,7 @@ class SettingsUpdate(BaseModel):
     retire_hours: Optional[int] = Field(default=None, ge=1, le=720)
     ip_effort_limit: Optional[int] = Field(default=None, ge=1, le=200)
     points_enabled: Optional[bool] = None
+    board_sort: Optional[Literal["activity", "manual"]] = None
 
 
 class DayOverrideIn(BaseModel):

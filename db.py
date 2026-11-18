@@ -47,7 +47,8 @@ ROW_LABEL_MAX = 60
 # a migration is added, so the next launch takes a pre-migration backup first.
 #   1: editable board rows (board_rows, projects.category CHECK removed)
 #   2: settings.points_enabled (effort points can be switched off)
-SCHEMA_VERSION = 2
+#   3: settings.board_sort (rows ordered by activity or manually)
+SCHEMA_VERSION = 3
 PRE_MIGRATION_RETENTION = 5
 
 SCHEMA_SQL = f"""
@@ -822,7 +823,8 @@ def get_settings() -> dict:
     row = get_conn().execute("SELECT * FROM settings WHERE id = 1").fetchone()
     if row is None:
         return {"daily_goal": 10, "vel_goal": 1.0, "retire_hours": 24, "ip_effort_limit": 100,
-                "onboarding_pending": False, "points_enabled": True}
+                "onboarding_pending": False, "points_enabled": True,
+                "board_sort": "activity"}
     return {
         "daily_goal": row["daily_goal"],
         "vel_goal": row["vel_goal"],
@@ -830,7 +832,13 @@ def get_settings() -> dict:
         "ip_effort_limit": row["ip_effort_limit"],
         "onboarding_pending": bool(row["onboarding_pending"]) if "onboarding_pending" in row.keys() else False,
         "points_enabled": bool(row["points_enabled"]) if "points_enabled" in row.keys() else True,
+        "board_sort": _board_sort_value(row),
     }
+
+
+def _board_sort_value(row) -> str:
+    value = row["board_sort"] if "board_sort" in row.keys() else None
+    return value if value in ("activity", "manual") else "activity"
 
 
 def patch_settings(data: dict) -> dict:
@@ -853,6 +861,11 @@ def patch_settings(data: dict) -> dict:
     if "points_enabled" in data:
         fields.append("points_enabled = ?")
         values.append(1 if data["points_enabled"] else 0)
+    if "board_sort" in data:
+        if data["board_sort"] not in ("activity", "manual"):
+            raise ValueError(f"unknown board_sort: {data['board_sort']!r}")
+        fields.append("board_sort = ?")
+        values.append(data["board_sort"])
     if fields:
         conn.execute(
             f"UPDATE settings SET {', '.join(fields)} WHERE id = 1",
@@ -943,6 +956,7 @@ def init_schema() -> None:
     _migrate_drop_project_category_check(conn)
     _migrate_add_onboarding_flag(conn)
     _migrate_add_points_enabled(conn)
+    _migrate_add_board_sort(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -1110,6 +1124,17 @@ def _migrate_add_points_enabled(conn: sqlite3.Connection) -> None:
     if "points_enabled" not in cols:
         conn.execute(
             "ALTER TABLE settings ADD COLUMN points_enabled INTEGER NOT NULL DEFAULT 1")
+
+
+def _migrate_add_board_sort(conn: sqlite3.Connection) -> None:
+    """Idempotent: settings.board_sort ('activity' default, or 'manual').
+
+    Decides how every board row is ordered; see board_order.py.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()}
+    if "board_sort" not in cols:
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN board_sort TEXT NOT NULL DEFAULT 'activity'")
 
 
 def points_enabled(conn: sqlite3.Connection | None = None) -> bool:
