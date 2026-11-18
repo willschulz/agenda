@@ -1,11 +1,12 @@
 ---
-description: Pick up an Agenda todo through its local API, read context, and obtain plan approval before working
+description: Pick up an Agenda todo through its local API, read context, and obtain plan approval before working; track requested work without a todo by finding or creating its card
 alwaysApply: true
 ---
 # Agenda todo pickup
 
-Apply this workflow only when the user identifies an Agenda todo or pastes a
-todo's Copy-button prompt. Do not query Agenda for unrelated requests.
+Apply the pickup steps (sections 1–4) when the user identifies an Agenda todo
+or pastes a todo's Copy-button prompt. When the user asks for work without
+naming a todo, follow "Work requested without a todo" below instead.
 
 ## 1. Resolve and read context
 
@@ -75,6 +76,48 @@ set it only on the todo actually being worked and clear it at session end.
 Use at most one running todo per project.
 
 Breakdown-only sessions do not set `running`.
+
+## Work requested without a todo
+
+When the user asks for work without naming a todo (a fix, a feature, a
+deploy, an analysis), skip the pickup steps above but still track the work
+in Agenda. The aim is a steady pull toward doing work through Agenda
+without filling the board with trivial cards, so existing cards come
+first.
+
+Do this once you are past reading and about to make the first change for
+a project on the board (edit a file, commit, deploy, change configuration,
+start a job, produce an analysis output), in the same turn:
+
+1. **Look for an existing card.** Search 2–4 distinctive nouns (open
+   todos first, then with `include_completed=true`).
+   - If one open todo clearly is this work, set its `running` flag, say so
+     in one line, and continue. The summary and plan steps are not needed
+     unless the user asked for a plan.
+   - If the work extends an existing todo, add to it: a child todo for a
+     distinct deliverable, or a lab note for a small step. If its title or
+     scope no longer fits, propose new wording. Don't silently rewrite a
+     todo the user wrote.
+2. **If nothing fits, create a todo** on the matching project without
+   asking: a short title (at most eight words), `"running": true`,
+   `for_later: false`, top-level unless an open parent clearly covers it.
+   Tell the user in one line, e.g. "Tracking this as Agenda #42 on
+   <project>."
+3. **Ask briefly when it's ambiguous:** several possible matching todos,
+   partial overlap, more than one plausible project, or work that seems
+   to need a new project. Never create a project without the user's
+   approval.
+4. **One todo per deliverable.** If the session moves on to different
+   work, repeat these steps for it.
+
+A todo is for a deliverable the user would want to see on the board later.
+A one-line tweak goes into the todo that already tracks it, or needs no
+todo at all. Don't register questions, explanations, status checks,
+read-only investigations, Agenda bookkeeping, or work done by a subagent
+whose parent session already holds the todo.
+
+Once registered, the session is a tracked session and the closeout rule
+applies.
 
 ## 5. Close out
 

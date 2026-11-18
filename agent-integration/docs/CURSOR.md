@@ -12,8 +12,11 @@
 4. For the most reliable handoff, use the todo card's **Copy** button and paste
    the resulting prompt into the chat.
 
-The rules activate only for requests that refer to Agenda todos. Ordinary code
-questions and unrelated work do not query Agenda.
+The rules also track work you ask for without naming a todo: before the first
+change, the agent looks for a matching todo, adds to it, or creates a short one
+and tells you in one line. It asks when the match or project is unclear.
+Questions and read-only investigations don't touch Agenda. To turn this off,
+delete the "Work requested without a todo" section from the pickup rule.
 
 ## Verification
 
@@ -23,5 +26,7 @@ During a test pickup, confirm that Cursor:
 - asks for confirmation before editing;
 - sets `running`, not `in_progress`, when work begins;
 - appends a concise lab note at closeout;
-- asks before creating follow-ups or completing the todo; and
-- clears `running` when the session ends.
+- asks before creating follow-ups or completing the todo;
+- clears `running` when the session ends; and
+- for a request that names no todo, finds or creates one before the first
+  change and says which.

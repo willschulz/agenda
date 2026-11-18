@@ -1,9 +1,9 @@
 # Agenda integration
 
-Use these instructions only when the user identifies an Agenda todo (for
-example by Task number and title) or pastes a structured block that already
-contains `todo_id` / `project_id`. Agenda is local at
-`http://127.0.0.1:8552`; do not query it for unrelated work.
+Agenda is local at `http://127.0.0.1:8552`. Use **Pickup** when the user
+identifies an Agenda todo (for example by Task number and title) or pastes a
+structured block that already contains `todo_id` / `project_id`. When the user
+asks for work without naming a todo, use **Work requested without a todo**.
 
 ## Pickup
 
@@ -26,6 +26,32 @@ contains `todo_id` / `project_id`. Agenda is local at
 5. Immediately before approved substantive work, set the todo's `running`
    field to true. `in_progress` is human-owned; never set or clear it.
 
+## Work requested without a todo
+
+Track the work in Agenda without filling the board with trivial cards.
+Existing cards come first. Once past reading and about to make the first
+change for a project on the board (edit, commit, deploy, configuration, job,
+analysis output), in the same turn:
+
+1. Search 2–4 key nouns. If one open todo clearly is this work, set its
+   `running` flag, say so in one line, and continue; no summary or plan is
+   needed unless asked. If the work extends a todo, add a child todo (distinct
+   deliverable) or a lab note (small step); propose rather than make wording
+   changes to a todo the user wrote.
+2. If nothing fits, create a todo on the matching project without asking:
+   short title, `"running": true`, `for_later: false`, top-level unless an
+   open parent clearly covers it. Say "Tracking this as Agenda #N on
+   <project>."
+3. Ask briefly when it's ambiguous: several possible matches, partial
+   overlap, more than one plausible project, or a new project seems needed.
+   Never create a project without approval.
+4. Repeat for each further deliverable in the session.
+
+A one-line tweak goes into the todo that tracks it, or needs none. Don't
+register questions, status checks, read-only investigations, Agenda
+bookkeeping, or subagent work whose parent session holds the todo. A
+registered session uses Closeout like any other.
+
 ## Closeout
 
 1. Always append a concise lab note first. Use the todo note endpoint when
@@ -38,6 +64,9 @@ contains `todo_id` / `project_id`. Agenda is local at
    Include concrete verification steps and paths to the artifacts.
 3. Propose five approval-gated buckets: follow-up todos, completion,
    project-context updates, reprioritization, and documentation updates.
+   Exception: a todo the agent created for a direct request can be completed
+   without asking once the work is done and verified and nothing needs the
+   user's judgment; say so in one line.
 4. After approval, create todos first, then reorder, update project context,
    update documentation, and complete the current todo last.
 5. Always clear the agent-owned `running` flag when the session ends.
