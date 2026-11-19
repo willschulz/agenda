@@ -84,30 +84,44 @@ picked up and driven by local coding agents such as Claude Code and Cursor.
 
 ## Getting started (development)
 
-Requirements: an Apple Silicon Mac running macOS 13 or later, Xcode 16 or
-later (or the matching Command Line Tools), and Python 3.12 or later for
-running the server directly. On-device AI features need macOS 26 with Apple
+Requirements: an Apple Silicon Mac running macOS 13 or later. The web UI and
+server need nothing else: `scripts/dev.sh` downloads the same pinned Python
+the app bundles. Building the native app needs Xcode 16 or later (or the
+matching Command Line Tools). On-device AI features need macOS 26 with Apple
 Intelligence enabled. Everything else works without it.
+
+**Building features with an AI agent?** Open the repo in Claude Code, Cursor,
+or Codex and describe what you want. `CLAUDE.md` (also `AGENTS.md`) tells the
+agent how to work here safely. See also
+[CONTRIBUTING → New to this?](CONTRIBUTING.md#new-to-this-building-a-feature-with-an-ai-agent).
 
 ### 1. Run the server and web UI directly (fastest loop)
 
 ```bash
 git clone https://github.com/willschulz/agenda.git
 cd agenda
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python seed.py                      # optional: a generic example board
-uvicorn main:app --reload --host 127.0.0.1 --port 8551
-# open http://127.0.0.1:8551/
+scripts/dev.sh            # http://127.0.0.1:8551, data in ./data/dev.db
+scripts/dev.sh --fresh    # start again from the starter board
 ```
 
-The database lives at `./data/agenda.db` (gitignored) unless you set
-`AGENDA_DB_PATH`. See `.env.example` for the other settings. Run the dev
-server on port 8551 so it can't collide with an installed Agenda app, which
-uses 8552.
+Python changes reload automatically; reload the browser after editing
+`static/index.html`. The development board lives at `./data/dev.db`
+(gitignored), and the server uses port 8551, so it never touches an
+installed Agenda (port 8552, its own database). To manage your own Python
+instead, `pip install -r requirements.txt` into a Python 3.12+ virtualenv and
+run `AGENDA_DB_PATH=./data/dev.db uvicorn main:app --reload --port 8551`. See
+`.env.example` for the other settings.
 
-### 2. Build and install the native app
+### 2. Build the native app
+
+To try Mac-app changes beside your installed Agenda, without touching it:
+
+```bash
+cd mac/Agenda
+./scripts/try-first-run.sh   # separate "Agenda Sandbox" app, own data and port
+```
+
+To replace your installed app with your build:
 
 ```bash
 cd mac/Agenda
@@ -117,11 +131,12 @@ cd mac/Agenda
 
 `install.sh` installs to `~/Applications/Agenda.app` and launches it. The
 build is ad-hoc signed, so it runs only on your Mac and has **no iCloud
-sync**, which needs a signed build with CloudKit entitlements. That's fine for
-development. **Warning:** if you already run the release app, `install.sh`
-replaces it and uses the same database at
-`~/Library/Application Support/Agenda/agenda.db`. Back it up first, or develop
-against the web server from step 1.
+sync** (that needs a signed build with CloudKit entitlements) and no
+automatic updates. It also opens the same database as the release app,
+`~/Library/Application Support/Agenda/agenda.db`. Because of that, it refuses
+to replace a signed release unless you pass `--replace-signed`. Back up
+first, and reinstall the release DMG afterwards to get sync and updates
+back.
 
 See [`mac/Agenda/README.md`](mac/Agenda/README.md) for details on the app.
 Signed, notarized releases are covered in
@@ -129,6 +144,9 @@ Signed, notarized releases are covered in
 maintainer.
 
 ### 3. Run the tests
+
+`scripts/check.sh` runs everything CI runs (`--quick` for just the Python
+tests and privacy gate). Individually:
 
 ```bash
 # Python (server, sync contract, usage ledger, insights)
