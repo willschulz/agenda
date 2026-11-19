@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/dev.sh)",
+      "Bash(scripts/dev.sh:*)",
+      "Bash(scripts/check.sh)",
+      "Bash(scripts/check.sh:*)",
+      "Bash(scripts/verify-public.sh)",
+      "Bash(mac/Agenda/scripts/try-first-run.sh)",
+      "Bash(mac/Agenda/scripts/try-first-run.sh:*)",
+      "Bash(curl -sS http://127.0.0.1:8551/:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git switch -c:*)"
+    ]
+  }
+}

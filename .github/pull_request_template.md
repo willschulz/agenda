@@ -7,9 +7,8 @@
 
 ## How was it tested?
 
-- [ ] `PYTHONPATH=. python -m unittest discover -s tests`
-- [ ] `swift test` in `mac/Agenda` and/or `apple/AgendaSyncCore` (if Swift changed)
-- [ ] Tried it in the running app (`mac/Agenda/install.sh` or the dev server)
+- [ ] `scripts/check.sh` passes (or the steps it skipped are noted here)
+- [ ] Tried it in `scripts/dev.sh` or the Agenda Sandbox app
 - [ ] Screenshots for UI changes (light and dark mode)
 
 ## Checklist

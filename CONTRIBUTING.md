@@ -3,6 +3,41 @@
 Thanks for helping build Agenda. This guide covers the development workflow
 and the few rules that keep the project healthy.
 
+## New to this? Building a feature with an AI agent
+
+You don't need to know Python, Swift, or git to contribute. An AI coding
+agent can do the typing, and this repository tells it how to work here
+safely. A first feature usually looks like this:
+
+1. **Keep using the release app** for your real work. Your experiments
+   never touch it or its data.
+2. **Get the code:** `gh repo clone willschulz/agenda` (or `git clone`), then
+   `cd agenda`. You need the [GitHub CLI](https://cli.github.com) signed in
+   (`gh auth login`) to open pull requests.
+3. **Start your agent in that folder** (for example, run `claude`) and
+   describe the feature the way you'd describe it to a colleague: what you
+   want to see, and why.
+4. **Look at it.** The agent runs a private copy of Agenda at
+   `http://127.0.0.1:8551` with a practice board. Click around, and keep
+   asking for changes until it's right.
+5. **Optional: connect your agent to your own board.** Agenda's
+   [MCP server](agent-integration/docs/MCP.md) lets the agent track the work
+   on your real board (the practice copy stays separate). One command in
+   Claude Code: `claude mcp add agenda -- python3 "$PWD/agent-integration/mcp/agenda_mcp.py"`.
+6. **Ask the agent to open a pull request.** It runs the checks and writes up
+   the change. The maintainer reviews it, and once it's merged, it arrives
+   in everyone's Agenda, yours included, through the next automatic update.
+
+Why not just run your own build? A build you make yourself can't use iCloud
+sync (that needs the official signing identity) and doesn't update itself,
+so you'd be stuck on a private copy. Sending changes back is how you get
+your feature *and* keep sync and updates.
+
+Small, single-purpose pull requests are easiest to review and ship fastest.
+If you have an idea but don't want to build it, open a
+[feature request](https://github.com/willschulz/agenda/issues/new/choose)
+instead.
+
 ## Ground rules
 
 - **Discuss larger changes first.** For anything bigger than a bug fix or a
@@ -26,20 +61,15 @@ and the few rules that keep the project healthy.
 
 1. Fork the repository (or create a branch if you have write access).
 2. Set up the dev environment as described in
-   [README → Getting started](README.md#getting-started-development).
+   [README → Getting started](README.md#getting-started-development). In
+   short: `scripts/dev.sh`.
 3. Make your change on a feature branch, with tests where practical:
    - Python behavior → `tests/test_*.py` (`unittest`)
    - Swift app or sync behavior → `mac/Agenda/Tests/` or
      `apple/AgendaSyncCore/Tests/`
-4. Run the checks locally:
-
-   ```bash
-   PYTHONPATH=. python -m unittest discover -s tests
-   (cd mac/Agenda && swift test)
-   (cd apple/AgendaSyncCore && swift test)
-   agent-integration/scripts/verify-pack.sh
-   scripts/verify-public.sh
-   ```
+4. Run the checks locally with `scripts/check.sh`. It runs the same steps
+   as CI: Python tests, Swift tests, the agent-pack verifier, and the privacy
+   gate.
 
 5. Open a pull request against `main` and fill in the template. CI runs the
    same checks, and `main` requires a passing CI run and one approving
@@ -64,14 +94,14 @@ provisioning profiles, or API keys.
 
 ## Testing against real data safely
 
-`./install.sh` replaces `~/Applications/Agenda.app`, and the new build uses
-the same database as your installed copy. Before testing a migration or
-anything destructive, either:
-
-- run the server directly with a scratch database:
-  `AGENDA_DB_PATH=/tmp/agenda-dev.db uvicorn main:app --port 8551`, or
-- back up first with **Settings → Reveal Backups in Finder**. Agenda also
-  keeps automatic snapshots.
+`scripts/dev.sh` and the Agenda Sandbox app
+(`mac/Agenda/scripts/try-first-run.sh`) each use their own database, so
+neither can touch your real board. `./install.sh` is different: it replaces
+`~/Applications/Agenda.app`, and the new build uses the same database as your
+installed copy. It refuses to replace a signed release unless you pass
+`--replace-signed`. Before testing a migration or anything destructive
+against real data, back up first with **Settings → Reveal Backups in
+Finder**. Agenda also keeps automatic snapshots.
 
 ## Signing, releases, and iCloud sync
 

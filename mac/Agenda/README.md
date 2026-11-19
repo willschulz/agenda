@@ -52,6 +52,12 @@ cd mac/Agenda
 ./install.sh --no-build  # re-bundle the existing binary without recompiling
 ```
 
+`install.sh` replaces `~/Applications/Agenda.app` and uses the real database.
+It refuses to replace a signed (release or sync) build unless you add
+`--replace-signed`, because the ad-hoc result has no iCloud sync and no
+automatic updates. To try changes beside the installed app, use the sandbox
+below or `scripts/dev.sh` from the repo root.
+
 ## Try the first-run experience safely
 
 ```bash
