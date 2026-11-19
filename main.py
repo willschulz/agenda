@@ -18,6 +18,8 @@ import json
 import logging
 import os
 import re
+import shlex
+import sys
 import uuid
 import zlib
 from contextlib import asynccontextmanager, suppress
@@ -2378,6 +2380,47 @@ async def claude_setup_change(payload: ClaudeStatusLineAction):
         return await asyncio.to_thread(fn)
     except claude_statusline_setup.SetupError as e:
         raise HTTPException(409, str(e)) from e
+
+
+def _mcp_server_path() -> Optional[Path]:
+    """The bundled agent-pack MCP server: Resources/agent-integration in the
+    app (this file is in Resources/server), or the repo's own copy."""
+    here = Path(__file__).resolve().parent
+    for base in (here.parent, here):
+        path = base / "agent-integration" / "mcp" / "agenda_mcp.py"
+        if path.is_file():
+            return path
+    return None
+
+
+@app.get("/api/agent-integration/mcp")
+async def mcp_setup():
+    """How an MCP client starts this install's Agenda MCP server.
+
+    Uses the Python that runs this server (the app's bundled runtime), with
+    -I -B so it never writes bytecode into the signed app bundle.
+    """
+    path = _mcp_server_path()
+    if path is None:
+        return {"available": False}
+    args = ["-I", "-B", str(path)]
+    env: dict[str, str] = {}
+    port = os.environ.get("AGENDA_PORT", "8552")
+    if port != "8552":
+        env["AGENDA_URL"] = f"http://127.0.0.1:{port}"
+    env_prefix = "".join(f"--env {k}={shlex.quote(v)} " for k, v in env.items())
+    claude = (
+        f"claude mcp add --scope user {env_prefix}agenda -- "
+        + " ".join(shlex.quote(a) for a in [sys.executable, *args])
+    )
+    server: dict[str, Any] = {"command": sys.executable, "args": args}
+    if env:
+        server["env"] = env
+    return {
+        "available": True,
+        "claude_code_command": claude,
+        "client_config": {"mcpServers": {"agenda": server}},
+    }
 
 
 @app.get("/api/quota/history")

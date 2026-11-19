@@ -43,31 +43,29 @@ the [local API](API.md) for those, with the user's approval.
 
 ## Setup
 
-Keep Agenda running. Then register the server with your client, using the
-absolute path to `agenda_mcp.py`:
+The server ships inside Agenda.app. Keep Agenda running, open **Settings**,
+and under **Agent tools (MCP)**:
 
-- **Claude Code:**
+- **Copy Claude Code command** and run it in a terminal. It registers the
+  server for all your Claude Code projects (`--scope user`).
+- **Copy JSON config** for any other MCP client (Claude Desktop, Cursor) and
+  add it to that client's MCP settings.
 
-  ```bash
-  claude mcp add agenda -- python3 /absolute/path/to/agent-integration/mcp/agenda_mcp.py
-  ```
+Both run the server with the Python bundled in Agenda, so nothing else needs
+to be installed. They use `-I -B`, which keeps Python from writing into the
+app bundle (that would break its code signature). The copied command already
+contains the paths for your install; it looks like this:
 
-- **Claude Desktop, Cursor and other clients:** add a stdio server to the
-  client's MCP configuration:
+```bash
+claude mcp add --scope user agenda -- \
+  /Applications/Agenda.app/Contents/Resources/python/bin/python3 -I -B \
+  /Applications/Agenda.app/Contents/Resources/agent-integration/mcp/agenda_mcp.py
+```
 
-  ```json
-  {
-    "mcpServers": {
-      "agenda": {
-        "command": "python3",
-        "args": ["/absolute/path/to/agent-integration/mcp/agenda_mcp.py"]
-      }
-    }
-  }
-  ```
+From a source checkout instead, run `agent-integration/mcp/agenda_mcp.py`
+with any Python 3.9 or newer.
 
-Clients ask before each tool call unless you allow it. A reasonable setting
-is to allow the four read tools and keep asking for the rest.
+If you move Agenda.app, copy the command again and re-register.
 
 ## Check it
 

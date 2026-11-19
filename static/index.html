@@ -3034,6 +3034,18 @@
       Any status line you already have keeps showing, and Disconnect puts your setting back.
       Needs a Claude Pro or Max sign-in. No network requests.</p>
   </div>
+  <div class="settings-group" style="margin-top:20px" id="setting-mcp" hidden>
+    <label>Agent tools (MCP)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="setting-mcp-copy-claude" class="rows-btn small primary" type="button">Copy Claude Code command</button>
+      <button id="setting-mcp-copy-config" class="rows-btn small ghost" type="button">Copy JSON config</button>
+    </div>
+    <p class="settings-hint">Lets AI agents read and update your board through Agenda's MCP
+      server, which ships inside this app. Paste the command into a terminal for Claude Code,
+      or add the JSON to another MCP client's settings (Claude Desktop, Cursor). The tools
+      never change your in-progress marks, and agents still ask before completing todos.
+      Local only; nothing leaves this Mac.</p>
+  </div>
   <div class="settings-group" style="margin-top:20px">
     <label>Board rows</label>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -8307,6 +8319,31 @@ setInterval(refreshUsageBadges, 15 * 60 * 1000);
     } finally {
       sync();
     }
+  }
+  document.getElementById('settings-btn')?.addEventListener('click', sync);
+  sync();
+})();
+
+// ---- Settings: MCP server setup for agent clients ---------------------------
+
+(function initMcpSetting() {
+  const group = document.getElementById('setting-mcp');
+  if (!group) return;
+  let setup = null;
+  const copy = (text, what) => navigator.clipboard.writeText(text)
+    .then(() => toast(`Copied ${what}`), () => toast(`Couldn't copy ${what}`));
+  document.getElementById('setting-mcp-copy-claude')?.addEventListener('click', () => {
+    if (setup) copy(setup.claude_code_command, 'Claude Code command');
+  });
+  document.getElementById('setting-mcp-copy-config')?.addEventListener('click', () => {
+    if (setup) copy(JSON.stringify(setup.client_config, null, 2), 'JSON config');
+  });
+  async function sync() {
+    try {
+      const s = await api('GET', '/api/agent-integration/mcp');
+      setup = s.available ? s : null;
+    } catch { setup = null; }
+    group.hidden = !setup;
   }
   document.getElementById('settings-btn')?.addEventListener('click', sync);
   sync();
