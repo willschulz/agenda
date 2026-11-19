@@ -15,6 +15,9 @@ No Agenda account, cloud backend, or API key is required.
 - **Claude Code:** follow [`docs/CLAUDE_CODE.md`](docs/CLAUDE_CODE.md).
 - **Any agent:** a todo's **Copy** button produces a self-contained pickup
   prompt that can be pasted into an agent conversation.
+- **Any MCP client:** run the bundled MCP server; see [`docs/MCP.md`](docs/MCP.md).
+  It enforces the status and placement rules below, alongside the
+  instructions above.
 
 The portable workflow keeps ownership boundaries explicit:
 
