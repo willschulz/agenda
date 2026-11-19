@@ -10,6 +10,7 @@ PUBLISH_PATHS=(
     "$ROOT/docs"
     "$ROOT/cursor"
     "$ROOT/claude"
+    "$ROOT/mcp"
     "$PUBLIC_RELEASE_ROOT/.github/ISSUE_TEMPLATE/bug_report.md"
 )
 
@@ -18,6 +19,8 @@ required=(
     "$ROOT/docs/API.md"
     "$ROOT/docs/CURSOR.md"
     "$ROOT/docs/CLAUDE_CODE.md"
+    "$ROOT/docs/MCP.md"
+    "$ROOT/mcp/agenda_mcp.py"
     "$ROOT/cursor/.cursor/rules/agenda-todo-pickup.mdc"
     "$ROOT/cursor/.cursor/rules/agenda-todo-closeout.mdc"
     "$ROOT/claude/CLAUDE.md"

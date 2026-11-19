@@ -20,6 +20,10 @@ unclear. Questions and read-only investigations don't touch Agenda. To turn
 this off, delete the "Work requested without a todo" section from your
 `CLAUDE.md`.
 
+Optionally, also register the Agenda MCP server ([`MCP.md`](MCP.md)) so Claude
+Code uses Agenda tools instead of `curl`. Keep the `CLAUDE.md` instructions
+either way.
+
 ## Verification
 
 During a test pickup, confirm that Claude Code:
