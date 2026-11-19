@@ -295,5 +295,26 @@ class AgendaMcpTests(unittest.TestCase):
         self.assertTrue(is_error)
 
 
+
+class McpSetupEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reports_bundled_python_and_server_path(self):
+        setup = await main.mcp_setup()
+        self.assertTrue(setup["available"])
+        server = setup["client_config"]["mcpServers"]["agenda"]
+        self.assertEqual(server["args"][:2], ["-I", "-B"])
+        self.assertEqual(Path(server["args"][2]).resolve(), _MCP_PATH)
+        self.assertIn("claude mcp add --scope user agenda -- ", setup["claude_code_command"])
+        self.assertNotIn("env", server)
+
+    async def test_non_default_port_sets_agenda_url(self):
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"AGENDA_PORT": "8562"}):
+            setup = await main.mcp_setup()
+        server = setup["client_config"]["mcpServers"]["agenda"]
+        self.assertEqual(server["env"], {"AGENDA_URL": "http://127.0.0.1:8562"})
+        self.assertIn("--env AGENDA_URL=http://127.0.0.1:8562 agenda", setup["claude_code_command"])
+
+
 if __name__ == "__main__":
     unittest.main()

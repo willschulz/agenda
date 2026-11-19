@@ -83,7 +83,8 @@ cp -R "$REPO_DIR/static" "$DEST/Contents/Resources/server/static"
 mkdir -p "$DEST/Contents/Resources/agent-integration"
 cp "$AGENT_PACK_SRC/README.md" "$DEST/Contents/Resources/agent-integration/"
 cp -R "$AGENT_PACK_SRC/docs" "$AGENT_PACK_SRC/cursor" \
-   "$AGENT_PACK_SRC/claude" "$DEST/Contents/Resources/agent-integration/"
+   "$AGENT_PACK_SRC/claude" "$AGENT_PACK_SRC/mcp" \
+   "$DEST/Contents/Resources/agent-integration/"
 
 # codesign refuses to sign a bundle carrying extended attributes ("resource
 # fork, Finder information, or similar detritus not allowed in a bundle"), and
