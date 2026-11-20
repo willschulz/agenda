@@ -70,13 +70,26 @@ struct ContentView: View {
             ZStack {
                 AgendaPalette.background.ignoresSafeArea()
                 if sync.store.projects.isEmpty {
-                    ContentUnavailableView(
-                        "No cached Agenda data",
-                        systemImage: "icloud",
-                        description: Text(
-                            "Connect to iCloud once to download your private Agenda snapshot."
+                    ContentUnavailableView {
+                        Label("Waiting for your Mac", systemImage: "laptopcomputer.and.iphone")
+                    } description: {
+                        Text(
+                            "Agenda for iPhone and iPad shows the board from Agenda for Mac, "
+                            + "synced through your own private iCloud. Install Agenda on your Mac, "
+                            + "sign in to iCloud there with this Apple ID, and open it once while online."
                         )
-                    )
+                    } actions: {
+                        Link(
+                            "Get Agenda for Mac",
+                            destination: URL(string: "https://willschulz.github.io/agenda-releases/")!
+                        )
+                        .buttonStyle(.borderedProminent)
+                        .tint(AgendaPalette.accent)
+                        .foregroundStyle(AgendaPalette.background)
+                        Text(sync.status)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     .foregroundStyle(AgendaPalette.text)
                 } else if displayMode == .board {
                     AgendaBoardView(
