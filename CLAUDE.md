@@ -11,6 +11,11 @@ assume they know git, Swift, or this codebase.
 ships so users' agents can track work on their board. It is product content,
 not instructions for this repository.
 
+**Maintainers:** these instructions are written for contributors. If you're
+working with the project's maintainer and their own workspace has rules for
+Agenda (for example, about merging PRs or deploying to their installed app),
+follow those rules where they differ from this file.
+
 ## The one rule that protects the user's data
 
 There are two Agendas on this Mac, and you only ever test against the second.
