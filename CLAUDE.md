@@ -40,8 +40,11 @@ There are two Agendas on this Mac, and you only ever test against the second.
 - The MCP server (`agent-integration/mcp/agenda_mcp.py`) talks to port 8552
   unless `AGENDA_URL` says otherwise. When you change or try it, run it
   against the dev server, `AGENDA_URL=http://127.0.0.1:8551`, never the real
-  board. Its tests (`tests/test_agenda_mcp.py`) already use a temporary
-  database.
+  board. If you register it with a client for testing, use a different name
+  so the user's own `agenda` server stays as it is, for example
+  `claude mcp add agenda-dev --env AGENDA_URL=http://127.0.0.1:8551 -- python3 "$PWD/agent-integration/mcp/agenda_mcp.py"`,
+  and remove it afterwards (`claude mcp remove agenda-dev`). Its tests
+  (`tests/test_agenda_mcp.py`) already use a temporary database.
 
 ## Run it
 
