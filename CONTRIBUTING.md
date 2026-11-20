@@ -22,8 +22,11 @@ safely. A first feature usually looks like this:
    asking for changes until it's right.
 5. **Optional: connect your agent to your own board.** Agenda's
    [MCP server](agent-integration/docs/MCP.md) lets the agent track the work
-   on your real board (the practice copy stays separate). One command in
-   Claude Code: `claude mcp add agenda -- python3 "$PWD/agent-integration/mcp/agenda_mcp.py"`.
+   on your real board (the practice copy stays separate). In Agenda, open
+   **Settings → Agent tools (MCP)** and copy the Claude Code command (or the
+   JSON for other clients). If your Agenda doesn't have that section yet,
+   it arrives with the next update; until then, from this folder:
+   `claude mcp add --scope user agenda -- python3 "$PWD/agent-integration/mcp/agenda_mcp.py"`.
 6. **Ask the agent to open a pull request.** It runs the checks and writes up
    the change. The maintainer reviews it, and once it's merged, it arrives
    in everyone's Agenda, yours included, through the next automatic update.
